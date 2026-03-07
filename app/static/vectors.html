@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>Atlas Vector Explorer</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+
+body{
+font-family:Arial;
+background:#f7f7f8;
+padding:40px;
+}
+
+h1{
+margin-bottom:20px;
+}
+
+#chart{
+max-width:900px;
+}
+
+.table{
+margin-top:40px;
+background:white;
+padding:20px;
+border-radius:8px;
+}
+
+.row{
+margin-bottom:10px;
+padding:8px;
+border-bottom:1px solid #eee;
+}
+
+.chunk{
+color:#333;
+}
+
+.doc{
+font-size:12px;
+color:#666;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>Atlas AI Vector Explorer</h1>
+
+<canvas id="chart"></canvas>
+
+<div id="table" class="table"></div>
+
+<script>
+
+async function loadVectors(){
+
+let response = await fetch("/vectors")
+
+let data = await response.json()
+
+let xs = data.map(v => v.x)
+let ys = data.map(v => v.y)
+
+let ctx = document.getElementById('chart')
+
+new Chart(ctx,{
+type:'scatter',
+data:{
+datasets:[{
+label:'Document Chunks',
+data:data.map(v=>({x:v.x,y:v.y})),
+backgroundColor:'#2563eb'
+}]
+}
+})
+
+let table = document.getElementById("table")
+
+data.forEach(v => {
+
+let row = document.createElement("div")
+
+row.className="row"
+
+row.innerHTML =
+
+"<div class='chunk'>" + v.text + "</div>" +
+"<div class='doc'>Source: " + v.document + "</div>"
+
+table.appendChild(row)
+
+})
+
+}
+
+loadVectors()
+
+</script>
+
+</body>
+
+</html>

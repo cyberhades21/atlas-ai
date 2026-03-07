@@ -2,6 +2,7 @@
 <html>
 
 <head>
+
 <title>Atlas AI</title>
 <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -12,105 +13,144 @@
 Atlas AI – Engineering Knowledge Assistant
 </div>
 
-
-<div class="container">
-
-<h2>Upload Document</h2>
+<div class="upload">
 
 <input type="file" id="fileInput">
+
 <button onclick="uploadFile()">Upload</button>
 
-<p id="uploadStatus"></p>
-
-
-<hr>
-
-
-<h2>Ask Question</h2>
-
-<input type="text" id="questionBox" placeholder="Ask about uploaded documents...">
-
-<button onclick="askQuestion()">Ask</button>
-
-
-<h3>Answer</h3>
-
-<div id="answerBox"></div>
-
-
-<h3>Sources</h3>
-
-<div id="sourcesBox"></div>
+<span id="uploadStatus"></span>
 
 </div>
 
+<div class="chat-container">
+
+<div id="chat" class="chat"></div>
+
+</div>
+
+<div class="input-container">
+
+<div class="input-wrapper">
+
+<input
+id="questionBox"
+placeholder="Ask something about your documents..."
+onkeypress="if(event.key==='Enter'){askQuestion()}"
+>
+
+<button onclick="askQuestion()">Send</button>
+
+</div>
+
+</div>
 
 <script>
 
-async function uploadFile() {
+function addMessage(text,type,sources){
 
-    let file = document.getElementById("fileInput").files[0]
+    let chat = document.getElementById("chat")
 
-    if (!file) {
+    let msg = document.createElement("div")
+
+    msg.className = "message " + type
+
+    let bubble = document.createElement("div")
+
+    bubble.className = "bubble"
+
+    bubble.innerText = text
+
+    if(sources){
+
+        let src = document.createElement("div")
+
+        src.className="sources"
+
+        let html="<b>Sources</b><br>"
+
+        for(let s of sources){
+
+            html += s.document + "<br>"
+
+        }
+
+        src.innerHTML=html
+
+        bubble.appendChild(src)
+    }
+
+    msg.appendChild(bubble)
+
+    chat.appendChild(msg)
+
+    chat.scrollTop = chat.scrollHeight
+}
+
+
+
+async function uploadFile(){
+
+    let file=document.getElementById("fileInput").files[0]
+
+    if(!file){
         alert("Select a file")
         return
     }
 
-    let formData = new FormData()
+    let formData=new FormData()
 
-    formData.append("file", file)
+    formData.append("file",file)
 
-    document.getElementById("uploadStatus").innerText = "Uploading..."
+    document.getElementById("uploadStatus").innerText="Indexing..."
 
-    let response = await fetch("/documents/upload", {
-        method: "POST",
-        body: formData
+    let response=await fetch("/documents/upload",{
+        method:"POST",
+        body:formData
     })
 
-    let result = await response.json()
+    await response.json()
 
-    document.getElementById("uploadStatus").innerText =
-        "Indexed: " + file.name
+    document.getElementById("uploadStatus").innerText="Indexed: "+file.name
 }
 
 
-async function askQuestion() {
 
-    let question = document.getElementById("questionBox").value
+async function askQuestion(){
 
-    if (!question) {
-        alert("Enter a question")
-        return
-    }
+    let input=document.getElementById("questionBox")
 
-    document.getElementById("answerBox").innerText = "Thinking..."
+    let question=input.value.trim()
 
-    let response = await fetch("/query", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
+    if(!question) return
+
+    addMessage(question,"user")
+
+    input.value=""
+
+    addMessage("Thinking...","ai")
+
+    let response=await fetch("/query",{
+
+        method:"POST",
+
+        headers:{
+            "Content-Type":"application/json"
         },
-        body: JSON.stringify({
-            question: question
+
+        body:JSON.stringify({
+            question:question
         })
+
     })
 
-    let result = await response.json()
+    let result=await response.json()
 
-    document.getElementById("answerBox").innerText = result.answer
+    let chat=document.getElementById("chat")
 
-    let sourcesHTML = ""
+    chat.removeChild(chat.lastChild)
 
-    for (let s of result.sources) {
-
-        sourcesHTML +=
-            "<div class='source'>" +
-            "<b>" + s.document + "</b><br>" +
-            s.text +
-            "</div>"
-    }
-
-    document.getElementById("sourcesBox").innerHTML = sourcesHTML
+    addMessage(result.answer,"ai",result.sources)
 }
 
 </script>
