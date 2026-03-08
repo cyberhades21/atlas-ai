@@ -3,84 +3,109 @@
 
 <head>
 
-<title>Knowledge Graph</title>
+    <title>Knowledge Graph</title>
 
-<script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
+    <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
 
-<style>
+    <style>
+        body {
+            font-family: Arial;
+        }
 
-body {
-  font-family: Arial;
-}
-
-#graph {
-  width: 100%;
-  height: 90vh;
-  border: 1px solid #ccc;
-}
-
-</style>
+        #graph {
+            width: 100%;
+            height: 90vh;
+            border: 1px solid #ccc;
+        }
+    </style>
 
 </head>
 
 <body>
 
-<h2>Knowledge Graph</h2>
+    <h2>Knowledge Graph</h2>
 
-<div id="graph"></div>
+    <div id="graph"></div>
 
-<script>
+    <script>
 
-fetch("/graph")
-.then(res => res.json())
-.then(data => {
+        fetch("/graph")
+            .then(res => res.json())
+            .then(data => {
 
-  const elements = [
-    ...data.nodes,
-    ...data.edges
-  ];
+                const elements = [
+                    ...data.nodes,
+                    ...data.edges
+                ];
 
-  const cy = cytoscape({
+                const cy = cytoscape({
 
-    container: document.getElementById("graph"),
+                    container: document.getElementById("graph"),
 
-    elements: elements,
+                    elements: elements,
 
-    style: [
+                    style: [
 
-      {
-        selector: "node",
-        style: {
-          "background-color": "#0074D9",
-          "label": "data(id)",
-          "text-valign": "center",
-          "color": "#fff"
-        }
-      },
+                        {
+                            selector: "node",
+                            style: {
+                                "background-color": "#0074D9",
+                                "label": "data(id)",
+                                "text-wrap": "wrap",
+                                "text-max-width": "80px",
+                                "font-size": "10px",
+                                "color": "#fff",
+                                "text-valign": "center",
+                                "text-halign": "center",
+                                "width": "label",
+                                "height": "label",
+                                "padding": "10px"
+                            }
+                        },
 
-      {
-        selector: "edge",
-        style: {
-          "width": 2,
-          "line-color": "#aaa",
-          "target-arrow-color": "#aaa",
-          "target-arrow-shape": "triangle",
-          "curve-style": "bezier",
-          "label": "data(label)"
-        }
-      }
+                        {
+                            selector: "edge",
+                            style: {
+                                "width": 2,
+                                "line-color": "#aaa",
+                                "target-arrow-color": "#aaa",
+                                "target-arrow-shape": "triangle",
+                                "curve-style": "bezier",
+                                "label": "data(label)",
+                                "font-size": "8px",
+                                "text-background-color": "#fff",
+                                "text-background-opacity": 1,
+                                "text-background-padding": "2px"
+                            }
+                        }
 
-    ],
+                    ],
 
-    layout: {
-      name: "cose"
-    }
+                    layout: {
+                        name: "cose",
+                        idealEdgeLength: 120,
+                        nodeOverlap: 20,
+                        refresh: 20,
+                        fit: true,
+                        padding: 30,
+                        randomize: true,
+                        componentSpacing: 120,
+                        nodeRepulsion: 400000,
+                        edgeElasticity: 100,
+                        nestingFactor: 5,
+                        gravity: 80,
+                        numIter: 1000,
+                        initialTemp: 200,
+                        coolingFactor: 0.95,
+                        minTemp: 1
+                    }
+                });
+                cy.fit();
+                cy.center();
 
-  });
+            });
 
-});
-
-</script>
+    </script>
 
 </body>
 
