@@ -1,4 +1,5 @@
 import ollama
+import json
 
 
 def generate_answer(context, question):
@@ -26,3 +27,27 @@ Question:
     )
 
     return response["message"]["content"]
+
+
+def call_llm_json(prompt):
+
+    response = ollama.chat(
+        model="mistral",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a system that extracts structured data and returns ONLY valid JSON."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    )
+
+    content = response["message"]["content"]
+
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        return []

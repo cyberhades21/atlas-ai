@@ -1,12 +1,21 @@
 from fastapi import APIRouter
+from pydantic import BaseModel
+
 from app.services.query_service import answer_query
+
 
 router = APIRouter()
 
 
+class QueryRequest(BaseModel):
+    question: str
+
+
 @router.post("/query")
-async def query(data: dict):
+async def query(data: QueryRequest):
 
-    question = data["question"]
+    question = data.question
 
-    return answer_query(question)
+    result = answer_query(question)
+
+    return result
