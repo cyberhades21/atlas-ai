@@ -19,12 +19,15 @@ async def ingest_document(filepath, filename):
     all_relationships = []
 
     print("Extracting relationships...")
+    print("Chunk Size : ", len(chunks))
     all_entities = []
     all_relationships = []
 
     for chunk in chunks:
         entities = extract_entities(chunk)
         triples = extract_relationships(chunk)
+        print("Entities",entities)
+        print("Triples",triples)
 
         if entities:
             all_entities.extend(entities)

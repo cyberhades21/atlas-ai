@@ -13,11 +13,16 @@ CREATE TABLE IF NOT EXISTS entities (
 def store_entities(entities, document):
 
     for entity in entities:
+        if not entity:
+            continue
+
+        if isinstance(entity, dict):
+            entity = entity.get("entity")
+        
         conn.execute(
             "INSERT INTO entities VALUES (?, ?)",
             (entity, document)
         )
-
     conn.commit()
 
 
