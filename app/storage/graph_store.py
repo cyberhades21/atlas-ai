@@ -15,6 +15,11 @@ CREATE TABLE IF NOT EXISTS relationships (
 def store_relationships(triples, document):
 
     for t in triples:
+        entity1 = t.get("entity1")
+        relation = t.get("relation")
+        entity2 = t.get("entity2")
+        if not entity1 or not relation or not entity2:
+            continue  
         conn.execute(
             "INSERT INTO relationships VALUES (?, ?, ?, ?)",
             (t["entity1"], t["relation"], t["entity2"], document)
