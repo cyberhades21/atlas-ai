@@ -30,6 +30,8 @@ router = APIRouter(prefix="/simulator")
 class RunRequest(BaseModel):
     question: str
     step_mode: bool = False
+    top_k: int = 5
+    temperature: float = 0.7
 
 
 class NextStepRequest(BaseModel):
@@ -53,7 +55,13 @@ async def start_run(body: RunRequest):
     bus.create_run(run_id, loop)
 
     def _worker():
-        run_instrumented_pipeline(run_id, body.question, step_mode=body.step_mode)
+        run_instrumented_pipeline(
+            run_id,
+            body.question,
+            step_mode=body.step_mode,
+            top_k=body.top_k,
+            temperature=body.temperature,
+        )
 
     thread = threading.Thread(target=_worker, daemon=True)
     thread.start()

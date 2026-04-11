@@ -5,9 +5,8 @@ The EventBus holds per-run queues that the SSE endpoint drains.
 """
 
 import time
-import uuid
 from dataclasses import dataclass, field, asdict
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 import asyncio
 import threading
 
@@ -37,13 +36,24 @@ class EventBus:
     """
     Thread-safe event bus.
     Each run_id maps to an asyncio.Queue that the SSE handler reads.
-    The query service writes events from a sync thread via put_nowait.
+    The query service writes events from a sync thread via run_coroutine_threadsafe.
+
+    FIX #1 — per-run loop storage:
+        Previously `self._loop` was a single field overwritten on every
+        create_run() call.  Under concurrent runs, the second caller would
+        overwrite the loop reference used by the first run's emit(), causing
+        events for run-1 to be dispatched onto run-2's event loop — resulting
+        in either silent drops or a RuntimeError on the wrong loop.
+
+        Fix: store (queue, loop) together in `self._runs[run_id]` so each run
+        always uses the loop that was current when it was registered.
     """
 
     def __init__(self):
-        self._queues: Dict[str, asyncio.Queue] = {}
+        # run_id -> (asyncio.Queue, asyncio.AbstractEventLoop)
+        self._runs: Dict[str, Tuple[asyncio.Queue, asyncio.AbstractEventLoop]] = {}
         self._lock = threading.Lock()
-        # Snapshot store: run_id -> list[PipelineEvent]
+        # Snapshot store: run_id -> list[dict]
         self._snapshots: Dict[str, list] = {}
 
     # ------------------------------------------------------------------
@@ -54,24 +64,28 @@ class EventBus:
         """Register a new run and return its queue."""
         q: asyncio.Queue = asyncio.Queue()
         with self._lock:
-            self._queues[run_id] = q
+            self._runs[run_id] = (q, loop)
             self._snapshots[run_id] = []
-            self._loop = loop
         return q
 
     def get_queue(self, run_id: str) -> Optional[asyncio.Queue]:
         with self._lock:
-            return self._queues.get(run_id)
+            entry = self._runs.get(run_id)
+            return entry[0] if entry else None
 
     def close_run(self, run_id: str):
         """Signal the SSE stream that this run is done by enqueuing None."""
         with self._lock:
-            q = self._queues.get(run_id)
-        if q:
+            entry = self._runs.get(run_id)
+        if entry:
+            q, loop = entry
             try:
-                asyncio.run_coroutine_threadsafe(q.put(None), self._loop).result(timeout=2)
+                asyncio.run_coroutine_threadsafe(q.put(None), loop).result(timeout=2)
             except Exception:
                 pass
+            # Remove from active runs (snapshot stays for replay)
+            with self._lock:
+                self._runs.pop(run_id, None)
 
     # ------------------------------------------------------------------
     # Emitting
@@ -83,10 +97,10 @@ class EventBus:
             snapshot = self._snapshots.get(event.run_id)
             if snapshot is not None:
                 snapshot.append(event.to_dict())
-            q = self._queues.get(event.run_id)
-            loop = getattr(self, "_loop", None)
+            entry = self._runs.get(event.run_id)
 
-        if q and loop:
+        if entry:
+            q, loop = entry
             asyncio.run_coroutine_threadsafe(q.put(event.to_dict()), loop)
 
     # ------------------------------------------------------------------

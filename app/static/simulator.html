@@ -1141,7 +1141,12 @@ async function startRun() {
   const res  = await fetch("/simulator/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, step_mode: state.stepMode })
+    body: JSON.stringify({
+      question,
+      step_mode: state.stepMode,
+      top_k: parseInt(document.getElementById("topkSlider").value, 10),
+      temperature: parseFloat(document.getElementById("tempSlider").value),
+    })
   });
   const data = await res.json();
   state.runId = data.run_id;
