@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ATLAS AI | RAG Graph Simulator</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "on-background": "#dfe2f1",
+        "surface": "#0f131d",
+        "outline-variant": "#424754",
+        "error-container": "#93000a",
+        "surface-bright": "#353944",
+        "inverse-on-surface": "#2c303b",
+        "on-secondary": "#472a00",
+        "surface-container-low": "#171b26",
+        "on-primary-container": "#00285d",
+        "outline": "#8c909f",
+        "surface-container": "#1c1f2a",
+        "inverse-surface": "#dfe2f1",
+        "secondary-container": "#ee9800",
+        "on-secondary-container": "#5b3800",
+        "tertiary": "#4edea3",
+        "on-surface": "#dfe2f1",
+        "on-error": "#690005",
+        "primary": "#adc6ff",
+        "surface-variant": "#313540",
+        "surface-container-highest": "#313540",
+        "surface-container-lowest": "#0a0e18",
+        "background": "#0f131d",
+        "secondary": "#ffb95f",
+        "error": "#ffb4ab",
+        "primary-container": "#4d8eff",
+        "tertiary-container": "#00a572",
+        "surface-tint": "#adc6ff",
+        "on-primary": "#002e6a",
+        "primary-fixed-dim": "#adc6ff",
+        "surface-container-high": "#262a35",
+        "on-surface-variant": "#c2c6d6",
+        "on-tertiary-container": "#00311f",
+        "error-container": "#93000a",
+        "on-error-container": "#ffdad6"
+      },
+      borderRadius: {
+        DEFAULT: "0.125rem",
+        lg: "0.25rem",
+        xl: "0.5rem",
+        full: "0.75rem"
+      },
+      fontFamily: {
+        headline: ["Space Grotesk"],
+        body: ["Inter"],
+        label: ["Inter"],
+        mono: ["JetBrains Mono"]
+      }
+    }
+  }
+}
+</script>
+<style>
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+  .fill-icon { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+
+  /* Grid dot background */
+  .grid-bg {
+    background-image: radial-gradient(circle at 1px 1px, rgba(66,71,84,0.5) 1px, transparent 0);
+    background-size: 40px 40px;
+  }
+
+  /* Node glow states */
+  .node-idle    { border-color: rgba(66,71,84,0.4); }
+  .node-running { border-color: #ffb95f; box-shadow: 0 0 18px rgba(255,185,95,0.35); }
+  .node-completed { border-color: #4edea3; box-shadow: 0 0 14px rgba(78,222,163,0.25); }
+  .node-error   { border-color: #ffb4ab; box-shadow: 0 0 18px rgba(255,180,171,0.4); }
+  .node-warning { border-color: #ffb95f; box-shadow: 0 0 10px rgba(255,185,95,0.2); }
+  .node-waiting { border-color: #adc6ff; box-shadow: 0 0 14px rgba(173,198,255,0.3); }
+
+  /* SVG edge flow animation */
+  @keyframes dashFlow {
+    to { stroke-dashoffset: -20; }
+  }
+  .edge-active {
+    stroke-dasharray: 6 4;
+    animation: dashFlow 0.6s linear infinite;
+  }
+  .edge-done {
+    stroke-dasharray: none;
+    opacity: 0.7;
+  }
+  .edge-idle {
+    stroke-dasharray: 4 6;
+    opacity: 0.2;
+  }
+
+  /* Pulse for running nodes */
+  @keyframes nodeRingPulse {
+    0%,100% { opacity: 0.6; transform: scale(1); }
+    50%      { opacity: 0.1; transform: scale(1.15); }
+  }
+  .pulse-ring {
+    animation: nodeRingPulse 1.2s ease-in-out infinite;
+  }
+
+  /* Inspector slide-in */
+  #inspector {
+    transition: transform 0.25s cubic-bezier(0.4,0,0.2,1), opacity 0.2s;
+  }
+  #inspector.hidden-panel {
+    transform: translateX(100%);
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: #0f131d; }
+  ::-webkit-scrollbar-thumb { background: #313540; border-radius: 2px; }
+
+  /* Timeline step chip */
+  .timeline-step { transition: all 0.2s; }
+  .timeline-step.active {
+    color: #ffb95f;
+    filter: drop-shadow(0 0 6px #ffb95f);
+  }
+  .timeline-step.completed { color: #4edea3; }
+  .timeline-step.error-step { color: #ffb4ab; }
+
+  /* Glass panel */
+  .glass {
+    background: rgba(28, 31, 42, 0.75);
+    backdrop-filter: blur(12px);
+  }
+</style>
+</head>
+<body class="bg-surface text-on-background font-body overflow-hidden h-screen flex flex-col select-none">
+
+<!-- ═══════════════════════════════════════════════════════════════ TOP NAV -->
+<header class="bg-surface-container-low flex justify-between items-center px-6 py-3 z-50 shrink-0 border-b border-outline-variant/10">
+  <div class="flex items-center gap-8">
+    <a href="/" class="text-xl font-bold tracking-tighter text-primary font-headline">ATLAS AI</a>
+    <nav class="hidden md:flex gap-6">
+      <a href="/" class="text-slate-400 font-medium hover:text-primary transition-colors font-headline tracking-tight text-sm">Chat</a>
+      <span class="text-primary border-b-2 border-primary-container pb-1 font-headline tracking-tight text-sm cursor-default">Simulator</span>
+      <a href="/graph-view" class="text-slate-400 font-medium hover:text-primary transition-colors font-headline tracking-tight text-sm">Graph</a>
+    </nav>
+  </div>
+  <div class="flex items-center gap-4">
+    <!-- Run mode toggle -->
+    <div class="flex items-center gap-2 bg-surface-container px-3 py-1.5 rounded-sm border border-outline-variant/20">
+      <span class="text-[10px] font-label uppercase tracking-widest text-slate-500">Step Mode</span>
+      <button id="stepModeToggle" onclick="toggleStepMode()" class="w-9 h-5 bg-surface-container-highest rounded-full relative transition-colors" title="Toggle step-by-step mode">
+        <span id="stepModeKnob" class="absolute top-0.5 left-0.5 w-4 h-4 bg-slate-500 rounded-full transition-all"></span>
+      </button>
+    </div>
+    <button onclick="document.getElementById('replayModal').classList.remove('hidden')"
+            class="flex items-center gap-1.5 text-slate-400 hover:text-primary transition-colors text-xs font-label uppercase tracking-widest">
+      <span class="material-symbols-outlined text-sm">history</span>
+      Replay
+    </button>
+    <a href="/" class="text-slate-400 hover:text-primary transition-colors">
+      <span class="material-symbols-outlined">arrow_back</span>
+    </a>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════ MAIN LAYOUT -->
+<div class="flex flex-1 overflow-hidden">
+
+  <!-- ─────────────────────────────────────────────────── LEFT SIDEBAR -->
+  <aside class="bg-surface-container-low w-72 shrink-0 flex flex-col border-r border-outline-variant/10 shadow-[20px_0_40px_rgba(0,0,0,0.4)] z-40 overflow-y-auto">
+    <div class="p-5">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-9 h-9 bg-primary/10 rounded-sm flex items-center justify-center border border-primary/20">
+          <span class="material-symbols-outlined text-primary fill-icon">hub</span>
+        </div>
+        <div>
+          <div class="text-primary font-headline font-bold text-sm">Simulation Control</div>
+          <div class="text-[10px] text-slate-500 uppercase tracking-widest">v2.4.0-Stable</div>
+        </div>
+      </div>
+
+      <!-- Query input -->
+      <div class="space-y-2 mb-4">
+        <label class="text-[10px] text-slate-500 uppercase tracking-widest font-bold block">Inference Query</label>
+        <textarea id="queryInput" rows="4"
+          class="w-full bg-surface-container-lowest border-none rounded-sm p-3 text-xs text-on-background font-mono focus:ring-1 focus:ring-primary/50 resize-none placeholder:text-slate-600"
+          placeholder="Enter your question..."></textarea>
+      </div>
+
+      <!-- Step mode hint -->
+      <div id="stepHint" class="hidden mb-4 p-3 bg-secondary/10 border border-secondary/20 rounded-sm">
+        <div class="flex items-center gap-2">
+          <span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+          <span class="text-secondary text-[10px] font-bold uppercase tracking-tighter">Step-By-Step Mode</span>
+        </div>
+        <p class="text-[10px] text-on-surface-variant mt-1 leading-relaxed">Pipeline will pause after each step. Use Next Step to advance.</p>
+      </div>
+
+      <!-- Run button -->
+      <button onclick="startRun()"
+        class="w-full bg-gradient-to-r from-primary to-primary-container text-on-primary-container font-bold py-3 rounded-sm text-xs uppercase tracking-widest active:scale-[0.98] transition-transform flex items-center justify-center gap-2 mb-2">
+        <span class="material-symbols-outlined text-sm">play_arrow</span>
+        Run Execution
+      </button>
+
+      <!-- Step controls (shown in step mode) -->
+      <div id="stepControls" class="hidden flex gap-2">
+        <button id="nextStepBtn" onclick="sendNextStep()"
+          class="flex-1 py-2 bg-surface-container-highest hover:bg-surface-bright text-primary text-xs font-bold uppercase tracking-widest rounded-sm border border-primary/30 transition-colors flex items-center justify-center gap-1">
+          <span class="material-symbols-outlined text-sm">chevron_right</span>
+          Next Step
+        </button>
+      </div>
+
+      <!-- Top-K / Temperature sliders -->
+      <div class="mt-5 space-y-3 border-t border-outline-variant/10 pt-4">
+        <div class="flex justify-between items-center">
+          <label class="text-[10px] text-slate-500 uppercase tracking-widest">Top-K Retrieval</label>
+          <span id="topkVal" class="text-[10px] font-mono text-primary">5</span>
+        </div>
+        <input id="topkSlider" type="range" min="1" max="20" value="5"
+          oninput="document.getElementById('topkVal').textContent=this.value"
+          class="w-full h-1 bg-surface-container-highest rounded-full appearance-none accent-primary"/>
+        <div class="flex justify-between items-center mt-2">
+          <label class="text-[10px] text-slate-500 uppercase tracking-widest">Temperature</label>
+          <span id="tempVal" class="text-[10px] font-mono text-primary">0.7</span>
+        </div>
+        <input id="tempSlider" type="range" min="0" max="1" step="0.1" value="0.7"
+          oninput="document.getElementById('tempVal').textContent=parseFloat(this.value).toFixed(1)"
+          class="w-full h-1 bg-surface-container-highest rounded-full appearance-none accent-primary"/>
+      </div>
+    </div>
+
+    <!-- Nav items -->
+    <nav class="px-3 pb-2 space-y-0.5">
+      <a href="/" class="flex items-center gap-3 px-4 py-2.5 text-slate-500 hover:bg-surface-variant hover:text-white transition-colors rounded-sm text-sm">
+        <span class="material-symbols-outlined text-lg">chat</span><span>Chat</span>
+      </a>
+      <a href="/graph-view" class="flex items-center gap-3 px-4 py-2.5 text-slate-500 hover:bg-surface-variant hover:text-white transition-colors rounded-sm text-sm">
+        <span class="material-symbols-outlined text-lg">account_tree</span><span>Graph</span>
+      </a>
+    </nav>
+
+    <!-- Status indicator -->
+    <div class="mt-auto p-5 border-t border-outline-variant/10">
+      <div class="flex items-center gap-2">
+        <span id="statusDot" class="w-2 h-2 rounded-full bg-slate-600"></span>
+        <span id="statusText" class="text-[10px] font-label uppercase tracking-widest text-slate-500">Idle</span>
+      </div>
+      <div id="runIdDisplay" class="text-[9px] font-mono text-slate-700 mt-1 truncate"></div>
+    </div>
+  </aside>
+
+  <!-- ─────────────────────────────────────────────────── GRAPH CANVAS -->
+  <main class="flex-1 relative grid-bg overflow-hidden" id="graphCanvas">
+
+    <!-- SVG edges layer -->
+    <svg id="edgeLayer" class="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow-idle" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="rgba(66,71,84,0.4)"/>
+        </marker>
+        <marker id="arrow-active" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#3B82F6"/>
+        </marker>
+        <marker id="arrow-done" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#4edea3"/>
+        </marker>
+        <marker id="arrow-error" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#ffb4ab"/>
+        </marker>
+      </defs>
+    </svg>
+
+    <!-- Node containers are positioned absolutely, laid out by JS -->
+    <div id="nodeLayer" class="absolute inset-0"></div>
+
+    <!-- Floating zoom controls -->
+    <div class="absolute top-5 left-5 flex bg-surface-container/80 backdrop-blur-md border border-outline-variant/15 rounded-sm z-30">
+      <button onclick="zoom(1.15)" class="p-2 text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined text-sm">add</span></button>
+      <button onclick="zoom(0.87)" class="p-2 text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined text-sm">remove</span></button>
+      <div class="w-px bg-outline-variant/20 my-1"></div>
+      <button onclick="resetZoom()" class="p-2 text-slate-400 hover:text-primary transition-colors"><span class="material-symbols-outlined text-sm">center_focus_strong</span></button>
+    </div>
+
+    <!-- Flow status badge -->
+    <div id="flowStatus" class="absolute top-5 right-5 bg-surface-container-low/80 backdrop-blur-md px-3 py-1.5 rounded-sm border border-outline-variant/10 flex items-center gap-2 z-30">
+      <span id="flowDot" class="w-2 h-2 rounded-full bg-slate-600"></span>
+      <span id="flowLabel" class="text-[10px] font-mono text-slate-500 uppercase">IDLE</span>
+    </div>
+
+    <!-- Error banner (hidden by default) -->
+    <div id="errorBanner" class="hidden absolute top-14 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-error-container/30 border border-error/40 backdrop-blur-md px-5 py-2.5 rounded-xl z-40">
+      <span class="material-symbols-outlined text-error fill-icon">report</span>
+      <span id="errorMsg" class="font-headline font-medium text-error text-sm"></span>
+      <button onclick="this.parentElement.classList.add('hidden')" class="ml-2 text-error/60 hover:text-error">
+        <span class="material-symbols-outlined text-sm">close</span>
+      </button>
+    </div>
+  </main>
+
+  <!-- ─────────────────────────────────────────────── RIGHT TELEMETRY -->
+  <aside class="bg-surface-container-low w-72 shrink-0 flex flex-col border-l border-outline-variant/10 z-40 overflow-y-auto">
+    <div class="p-5">
+      <h3 class="text-xs font-bold text-primary uppercase tracking-widest mb-5">Live Telemetry</h3>
+
+      <!-- Step latency -->
+      <div class="mb-5 bg-surface-container p-3 rounded-sm border border-outline-variant/10">
+        <div class="flex justify-between items-center mb-1.5">
+          <span class="text-[10px] text-slate-500 uppercase tracking-widest">Last Step Latency</span>
+          <span id="lastLatency" class="text-[10px] font-mono text-tertiary">—</span>
+        </div>
+        <div class="h-1 bg-surface-container-highest rounded-full overflow-hidden">
+          <div id="latencyBar" class="h-full bg-tertiary transition-all" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- Reasoning trace -->
+      <h4 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Reasoning Trace</h4>
+      <div id="reasoningTrace" class="space-y-3 mb-5">
+        <!-- Steps populated by JS -->
+      </div>
+
+      <!-- Retrieved chunks -->
+      <h4 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Retrieved Chunks</h4>
+      <div id="retrievedChunks" class="space-y-2 mb-5">
+        <p class="text-[10px] text-slate-600 italic">Awaiting retrieval...</p>
+      </div>
+
+      <!-- Execution context -->
+      <div class="mt-4 p-3 bg-surface-container-highest/40 rounded-sm border border-outline-variant/15">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="material-symbols-outlined text-secondary text-sm">settings_input_component</span>
+          <span class="text-[10px] font-bold text-on-surface uppercase tracking-widest">Execution Context</span>
+        </div>
+        <div class="space-y-2">
+          <div class="flex justify-between"><span class="text-[10px] text-slate-500 uppercase">Entities</span><span id="ctx-entities" class="text-[10px] font-mono text-primary">—</span></div>
+          <div class="flex justify-between"><span class="text-[10px] text-slate-500 uppercase">Triples</span><span id="ctx-triples" class="text-[10px] font-mono text-primary">—</span></div>
+          <div class="flex justify-between"><span class="text-[10px] text-slate-500 uppercase">Embedding dim</span><span id="ctx-dims" class="text-[10px] font-mono text-primary">—</span></div>
+          <div class="flex justify-between"><span class="text-[10px] text-slate-500 uppercase">Approx Tokens</span><span id="ctx-tokens" class="text-[10px] font-mono text-primary">—</span></div>
+          <div class="flex justify-between"><span class="text-[10px] text-slate-500 uppercase">Model</span><span id="ctx-model" class="text-[10px] font-mono text-primary">mistral</span></div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+</div><!-- /main layout -->
+
+<!-- ═══════════════════════════════════════════════════════════ TIMELINE -->
+<footer class="bg-surface-container-low/90 backdrop-blur-xl border-t border-outline-variant/10 shadow-2xl shrink-0 z-50 px-6 py-3">
+  <div class="flex items-center gap-6">
+
+    <!-- Playback controls -->
+    <div class="flex items-center gap-3 shrink-0">
+      <button onclick="rewindRun()" class="flex flex-col items-center text-slate-500 hover:text-primary transition-colors opacity-60 hover:opacity-100">
+        <span class="material-symbols-outlined text-xl">fast_rewind</span>
+        <span class="text-[9px] font-label uppercase tracking-widest">Rewind</span>
+      </button>
+      <button id="playPauseBtn" onclick="togglePlayPause()"
+        class="w-10 h-10 flex items-center justify-center text-secondary drop-shadow-[0_0_8px_#ffb95f]">
+        <span id="playPauseIcon" class="material-symbols-outlined text-3xl fill-icon">play_circle</span>
+      </button>
+      <button onclick="skipToEnd()" class="flex flex-col items-center text-slate-500 hover:text-primary transition-colors opacity-60 hover:opacity-100">
+        <span class="material-symbols-outlined text-xl">fast_forward</span>
+        <span class="text-[9px] font-label uppercase tracking-widest">Skip</span>
+      </button>
+    </div>
+
+    <!-- Timeline scrubber -->
+    <div class="flex-1 flex flex-col gap-1 min-w-0">
+      <div class="relative h-8 flex items-center">
+        <!-- Track -->
+        <div class="absolute inset-x-0 h-1 bg-surface-container-highest rounded-full"></div>
+        <!-- Progress fill -->
+        <div id="timelineProgress" class="absolute left-0 h-1 bg-primary/30 rounded-full transition-all" style="width:0%"></div>
+        <!-- Step markers -->
+        <div id="timelineMarkers" class="absolute inset-x-0 flex justify-between items-center px-0"></div>
+        <!-- Playhead -->
+        <div id="playhead" class="absolute top-0 w-0.5 h-8 bg-secondary shadow-[0_0_10px_#ffb95f] transition-all" style="left:0%"></div>
+      </div>
+      <!-- Step labels -->
+      <div id="timelineLabels" class="flex justify-between text-[9px] font-label uppercase tracking-tighter text-slate-600 px-0"></div>
+    </div>
+
+    <!-- Timeline info -->
+    <div class="shrink-0 text-[10px] font-mono text-slate-500">
+      <span id="timelineStep">STEP 0</span> / <span id="timelineTotal">0</span>
+    </div>
+  </div>
+</footer>
+
+<!-- ═══════════════════════════════════════════════════════ NODE INSPECTOR -->
+<div id="inspector" class="hidden-panel fixed top-[49px] right-0 w-[420px] h-[calc(100vh-49px-56px)] glass border-l border-outline-variant/20 z-[60] flex flex-col shadow-[-20px_0_40px_rgba(0,0,0,0.6)] overflow-y-auto">
+  <div class="p-5 border-b border-outline-variant/10 shrink-0">
+    <div class="flex items-center justify-between mb-3">
+      <div class="flex items-center gap-3">
+        <div id="inspectorIcon" class="w-8 h-8 bg-primary/10 rounded-sm flex items-center justify-center">
+          <span class="material-symbols-outlined text-primary fill-icon text-lg">hub</span>
+        </div>
+        <div>
+          <h3 id="inspectorTitle" class="font-headline font-bold text-base text-primary">Node Inspector</h3>
+          <p id="inspectorSubtitle" class="text-[10px] text-slate-500 font-mono">Select a node</p>
+        </div>
+      </div>
+      <button onclick="closeInspector()" class="text-slate-500 hover:text-white transition-colors">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <!-- Status badges -->
+    <div class="flex gap-2 flex-wrap" id="inspectorBadges"></div>
+  </div>
+
+  <!-- Inspector tabs -->
+  <div class="flex border-b border-outline-variant/10 px-5 shrink-0" id="inspectorTabs">
+    <button onclick="showTab('overview')" id="tab-overview" class="px-3 py-2.5 text-primary border-b-2 border-primary text-[10px] font-bold uppercase tracking-widest">Overview</button>
+    <button onclick="showTab('payload')" id="tab-payload" class="px-3 py-2.5 text-slate-500 hover:text-white text-[10px] font-bold uppercase tracking-widest transition-colors">Raw Data</button>
+  </div>
+
+  <!-- Inspector content -->
+  <div class="flex-1 overflow-y-auto p-5" id="inspectorBody">
+    <p class="text-xs text-slate-600 italic">Click any node to inspect it.</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ REPLAY MODAL -->
+<div id="replayModal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-[80] flex items-center justify-center">
+  <div class="bg-surface-container border border-outline-variant/30 rounded-lg w-[480px] max-h-[70vh] flex flex-col shadow-2xl">
+    <div class="flex items-center justify-between p-5 border-b border-outline-variant/10">
+      <h3 class="font-headline font-bold text-primary">Previous Runs</h3>
+      <button onclick="document.getElementById('replayModal').classList.add('hidden')" class="text-slate-500 hover:text-white">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <div id="runsList" class="overflow-y-auto p-5 space-y-2 flex-1">
+      <p class="text-xs text-slate-600 italic">Loading...</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ SCRIPTS -->
+<script>
+// ============================================================
+// CONSTANTS — pipeline node definitions
+// ============================================================
+const NODES = [
+  { id: "query_received",    label: "Query",        icon: "send",           col: 0, row: 0 },
+  { id: "entity_extraction", label: "Entities",     icon: "label",          col: 1, row: 0 },
+  { id: "graph_search",      label: "Graph Search", icon: "account_tree",   col: 2, row: 0 },
+  { id: "embedding",         label: "Embedding",    icon: "schema",         col: 3, row: 0 },
+  { id: "vector_retrieval",  label: "Retrieval",    icon: "manage_search",  col: 4, row: 0 },
+  { id: "context_builder",   label: "Context",      icon: "layers",         col: 5, row: 0 },
+  { id: "prompt_builder",    label: "Prompt",       icon: "edit_note",      col: 6, row: 0 },
+  { id: "llm_generation",    label: "LLM",          icon: "psychology",     col: 7, row: 0 },
+  { id: "response_assembly", label: "Response",     icon: "output",         col: 8, row: 0 },
+];
+
+const EDGES = [
+  ["query_received","entity_extraction"],
+  ["query_received","embedding"],
+  ["entity_extraction","graph_search"],
+  ["graph_search","context_builder"],
+  ["embedding","vector_retrieval"],
+  ["vector_retrieval","context_builder"],
+  ["context_builder","prompt_builder"],
+  ["prompt_builder","llm_generation"],
+  ["llm_generation","response_assembly"],
+];
+
+const NODE_ICONS = {
+  query_received:    "send",
+  entity_extraction: "label",
+  graph_search:      "account_tree",
+  embedding:         "schema",
+  vector_retrieval:  "manage_search",
+  context_builder:   "layers",
+  prompt_builder:    "edit_note",
+  llm_generation:    "psychology",
+  response_assembly: "output",
+};
+
+const STEP_LABELS = [
+  "query","entities","graph","embed","retrieval","context","prompt","llm","response"
+];
+
+// ============================================================
+// STATE
+// ============================================================
+let state = {
+  runId: null,
+  stepMode: false,
+  running: false,
+  paused: false,
+  nodeStates: {},    // nodeId -> "idle"|"running"|"completed"|"error"|"warning"|"waiting"
+  nodePayloads: {},  // nodeId -> last payload object
+  completedSteps: [],
+  currentStep: null,
+  eventSource: null,
+  scale: 1,
+  translateX: 0,
+  translateY: 0,
+  activeTab: "overview",
+  inspectedNode: null,
+};
+
+// ============================================================
+// LAYOUT
+// ============================================================
+const NODE_W = 110, NODE_H = 80, H_GAP = 60, V_GAP = 0;
+
+function layoutNodes() {
+  const canvas = document.getElementById("graphCanvas");
+  const W = canvas.offsetWidth;
+  const H = canvas.offsetHeight;
+
+  const totalWidth = NODES.length * NODE_W + (NODES.length - 1) * H_GAP;
+  const startX = Math.max(20, (W - totalWidth) / 2);
+  const centerY = H / 2 - NODE_H / 2;
+
+  const positions = {};
+  NODES.forEach((n, i) => {
+    positions[n.id] = {
+      x: startX + i * (NODE_W + H_GAP),
+      y: centerY,
+      w: NODE_W,
+      h: NODE_H,
+    };
+  });
+  return positions;
+}
+
+function cx(pos) { return pos.x + pos.w / 2; }
+function cy(pos) { return pos.y + pos.h / 2; }
+
+// ============================================================
+// RENDER GRAPH
+// ============================================================
+function renderGraph() {
+  const positions = layoutNodes();
+
+  // --- Nodes ---
+  const nodeLayer = document.getElementById("nodeLayer");
+  nodeLayer.innerHTML = "";
+
+  NODES.forEach(node => {
+    const pos = positions[node.id];
+    const st  = state.nodeStates[node.id] || "idle";
+
+    const el = document.createElement("div");
+    el.id = "node-" + node.id;
+    el.className = `absolute flex flex-col items-center justify-center gap-1.5 bg-surface-container border-2 rounded-sm cursor-pointer transition-all duration-300 node-${st}`;
+    el.style.left   = pos.x + "px";
+    el.style.top    = pos.y + "px";
+    el.style.width  = pos.w + "px";
+    el.style.height = pos.h + "px";
+    el.onclick = () => openInspector(node.id);
+
+    // Pulse ring for running state
+    let pulseRing = "";
+    if (st === "running") {
+      pulseRing = `<div class="absolute inset-0 border-2 border-secondary rounded-sm pulse-ring pointer-events-none"></div>`;
+    }
+
+    // Status dot
+    const dotColor = {
+      idle: "bg-slate-600", running: "bg-secondary", completed: "bg-tertiary",
+      error: "bg-error", warning: "bg-secondary", waiting: "bg-primary"
+    }[st] || "bg-slate-600";
+
+    // Icon color
+    const iconColor = {
+      idle: "text-slate-500", running: "text-secondary", completed: "text-tertiary",
+      error: "text-error", warning: "text-secondary", waiting: "text-primary"
+    }[st] || "text-slate-500";
+
+    el.innerHTML = `
+      ${pulseRing}
+      <span class="material-symbols-outlined ${iconColor} text-2xl transition-colors ${st !== "idle" ? "fill-icon" : ""}">${node.icon}</span>
+      <span class="text-[9px] font-label uppercase tracking-widest ${st === "idle" ? "text-slate-600" : "text-on-surface"} text-center leading-tight px-1">${node.label}</span>
+      <span class="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full ${dotColor}"></span>
+    `;
+
+    nodeLayer.appendChild(el);
+  });
+
+  // --- Edges ---
+  const svg = document.getElementById("edgeLayer");
+  // Keep defs, remove old paths
+  const existing = svg.querySelectorAll("path.edge-path");
+  existing.forEach(p => p.remove());
+
+  EDGES.forEach(([from, to]) => {
+    const pFrom = positions[from];
+    const pTo   = positions[to];
+    if (!pFrom || !pTo) return;
+
+    const x1 = cx(pFrom), y1 = cy(pFrom);
+    const x2 = cx(pTo),   y2 = cy(pTo);
+
+    const stFrom = state.nodeStates[from] || "idle";
+    const stTo   = state.nodeStates[to]   || "idle";
+
+    let edgeClass, stroke, marker;
+    if (stFrom === "error" || stTo === "error") {
+      edgeClass = "edge-idle"; stroke = "#ffb4ab"; marker = "url(#arrow-error)";
+    } else if (stFrom === "completed" && stTo === "completed") {
+      edgeClass = "edge-done"; stroke = "#4edea3"; marker = "url(#arrow-done)";
+    } else if (stFrom === "completed" && stTo === "running") {
+      edgeClass = "edge-active"; stroke = "#3B82F6"; marker = "url(#arrow-active)";
+    } else if (stFrom === "running") {
+      edgeClass = "edge-active"; stroke = "#ffb95f"; marker = "url(#arrow-active)";
+    } else {
+      edgeClass = "edge-idle"; stroke = "rgba(66,71,84,0.4)"; marker = "url(#arrow-idle)";
+    }
+
+    // Curved path
+    const midX = (x1 + x2) / 2;
+    const d = `M${x1},${y1} C${midX},${y1} ${midX},${y2} ${x2},${y2}`;
+
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", stroke);
+    path.setAttribute("stroke-width", "1.5");
+    path.setAttribute("marker-end", marker);
+    path.classList.add("edge-path", edgeClass);
+
+    svg.appendChild(path);
+  });
+}
+
+// ============================================================
+// NODE STATES
+// ============================================================
+function setNodeState(nodeId, newState) {
+  state.nodeStates[nodeId] = newState;
+  renderGraph();
+}
+
+// ============================================================
+// TIMELINE
+// ============================================================
+const ORDERED_STEPS = [
+  "query_received","entity_extraction","graph_search","embedding",
+  "vector_retrieval","context_builder","prompt_builder","llm_generation","response_assembly"
+];
+
+function renderTimeline() {
+  const markers = document.getElementById("timelineMarkers");
+  const labels  = document.getElementById("timelineLabels");
+
+  markers.innerHTML = "";
+  labels.innerHTML  = "";
+
+  const total = ORDERED_STEPS.length;
+
+  ORDERED_STEPS.forEach((step, i) => {
+    const pct = (i / (total - 1)) * 100;
+    const st  = state.nodeStates[step] || "idle";
+
+    const dotClass = {
+      idle: "bg-slate-600 w-2.5 h-2.5",
+      running: "bg-secondary w-3.5 h-3.5 shadow-[0_0_8px_#ffb95f]",
+      waiting: "bg-primary w-3 h-3 shadow-[0_0_6px_#adc6ff]",
+      completed: "bg-tertiary w-2.5 h-2.5",
+      error: "bg-error w-3 h-3",
+      warning: "bg-secondary w-2.5 h-2.5",
+    }[st] || "bg-slate-600 w-2.5 h-2.5";
+
+    const dot = document.createElement("div");
+    dot.className = `absolute rounded-full transition-all ${dotClass}`;
+    dot.style.left = pct + "%";
+    dot.style.transform = "translateX(-50%)";
+    markers.appendChild(dot);
+
+    const lbl = document.createElement("span");
+    lbl.className = `absolute text-center transition-colors ${
+      st === "running" ? "text-secondary" :
+      st === "completed" ? "text-tertiary" :
+      st === "error" ? "text-error" : "text-slate-600"
+    }`;
+    lbl.style.left = pct + "%";
+    lbl.style.transform = "translateX(-50%)";
+    lbl.textContent = STEP_LABELS[i] || step;
+    labels.appendChild(lbl);
+  });
+
+  // Update playhead
+  const completedIdx = state.completedSteps.length;
+  const pct = completedIdx > 0 ? ((completedIdx - 1) / (total - 1)) * 100 : 0;
+  document.getElementById("playhead").style.left = pct + "%";
+  document.getElementById("timelineProgress").style.width = pct + "%";
+  document.getElementById("timelineStep").textContent = "STEP " + completedIdx;
+  document.getElementById("timelineTotal").textContent = total;
+}
+
+// ============================================================
+// REASONING TRACE SIDEBAR
+// ============================================================
+function updateReasoningTrace(step, status, latency) {
+  const trace = document.getElementById("reasoningTrace");
+  const label = ORDERED_STEPS.indexOf(step);
+
+  // Build entry
+  const entry = document.createElement("div");
+  entry.className = "relative pl-5 border-l border-outline-variant/30 pb-3";
+  const dotColor = status === "completed" ? "bg-primary" : status === "error" ? "bg-error" : "bg-secondary";
+  const textColor = status === "error" ? "text-error" : status === "completed" ? "text-on-surface-variant" : "text-secondary";
+  const latStr = latency ? `<span class="ml-2 font-mono text-tertiary">${latency.toFixed(0)}ms</span>` : "";
+  entry.innerHTML = `
+    <div class="absolute -left-[5px] top-0 w-2.5 h-2.5 rounded-full ${dotColor} ring-4 ring-surface-container-low"></div>
+    <span class="text-[9px] font-label text-slate-500 uppercase tracking-widest block">${(label + 1).toString().padStart(2,"0")}. ${step.replace(/_/g," ")}</span>
+    <span class="text-[10px] ${textColor}">${status}${latStr}</span>
+  `;
+  trace.appendChild(entry);
+  trace.scrollTop = trace.scrollHeight;
+}
+
+// ============================================================
+// LATENCY BAR
+// ============================================================
+function updateLatencyBar(ms) {
+  const max = 5000; // 5s cap
+  const pct = Math.min(100, (ms / max) * 100);
+  document.getElementById("lastLatency").textContent = ms.toFixed(0) + "ms";
+  document.getElementById("latencyBar").style.width = pct + "%";
+  document.getElementById("latencyBar").style.background =
+    ms < 500 ? "#4edea3" : ms < 2000 ? "#ffb95f" : "#ffb4ab";
+}
+
+// ============================================================
+// FLOW STATUS
+// ============================================================
+function setFlowStatus(label, color) {
+  document.getElementById("flowLabel").textContent = label;
+  const dot = document.getElementById("flowDot");
+  dot.className = `w-2 h-2 rounded-full ${color}`;
+}
+
+// ============================================================
+// STATUS INDICATOR
+// ============================================================
+function setStatus(text, color) {
+  document.getElementById("statusText").textContent = text;
+  const dot = document.getElementById("statusDot");
+  dot.className = `w-2 h-2 rounded-full ${color}`;
+}
+
+// ============================================================
+// HANDLE SSE EVENT
+// ============================================================
+function handleEvent(evt) {
+  const step    = evt.step;
+  const status  = evt.status;
+  const payload = evt.payload || {};
+  const latency = evt.latency_ms;
+
+  // --- pipeline-level signals ---
+  if (step === "pipeline") {
+    if (status === "done") {
+      setStatus("Completed", "bg-tertiary");
+      setFlowStatus("COMPLETE", "bg-tertiary");
+      state.running = false;
+      document.getElementById("playPauseIcon").textContent = "replay";
+    } else if (status === "error") {
+      setStatus("Error", "bg-error");
+      setFlowStatus("ERROR", "bg-error");
+      showError(payload.error || "Pipeline error");
+      state.running = false;
+    }
+    return;
+  }
+
+  if (step === "step_mode" && status === "waiting") {
+    setFlowStatus("WAITING", "bg-primary");
+    setNodeState(state.currentStep, "waiting");
+    renderTimeline();
+    return;
+  }
+
+  // --- Node updates ---
+  if (status === "started") {
+    state.currentStep = step;
+    setNodeState(step, "running");
+    setFlowStatus("RUNNING: " + step.toUpperCase().replace(/_/g," "), "bg-secondary animate-pulse");
+    updateReasoningTrace(step, "running", null);
+  }
+
+  if (status === "completed") {
+    state.nodeStates[step] = "completed";
+    state.nodePayloads[step] = payload;
+    if (!state.completedSteps.includes(step)) state.completedSteps.push(step);
+    setNodeState(step, "completed");
+
+    if (latency) updateLatencyBar(latency);
+    updateReasoningTrace(step, "completed", latency);
+
+    // Sidebar telemetry updates
+    if (step === "entity_extraction") {
+      document.getElementById("ctx-entities").textContent = (payload.entities || []).join(", ") || "—";
+    }
+    if (step === "graph_search") {
+      document.getElementById("ctx-triples").textContent = payload.triples_found || 0;
+    }
+    if (step === "embedding") {
+      document.getElementById("ctx-dims").textContent = payload.dimensions || "—";
+    }
+    if (step === "prompt_builder") {
+      document.getElementById("ctx-tokens").textContent = "~" + (payload.approx_tokens || 0);
+    }
+    if (step === "vector_retrieval") {
+      renderRetrievedChunks(payload.retrieved_docs || []);
+    }
+
+    // If inspector is open on this node, refresh
+    if (state.inspectedNode === step) refreshInspector(step);
+  }
+
+  if (status === "error") {
+    setNodeState(step, "error");
+    showError(`Node ${step}: ${payload.error || "unknown error"}`);
+    updateReasoningTrace(step, "error", latency);
+  }
+
+  if (status === "warning") {
+    showError(payload.message || "Warning");
+  }
+
+  renderTimeline();
+}
+
+// ============================================================
+// RETRIEVED CHUNKS PANEL
+// ============================================================
+function renderRetrievedChunks(docs) {
+  const el = document.getElementById("retrievedChunks");
+  if (!docs || docs.length === 0) {
+    el.innerHTML = `<p class="text-[10px] text-error italic">No chunks retrieved</p>`;
+    return;
+  }
+  el.innerHTML = docs.map(d => `
+    <div class="p-2.5 bg-surface-container border-l-2 border-secondary/50 rounded-sm">
+      <div class="text-[9px] text-secondary font-mono mb-1 truncate">${d.document}</div>
+      <p class="text-[10px] text-on-surface-variant leading-snug line-clamp-2">${d.text_preview}</p>
+      <span class="text-[9px] text-slate-600">${d.char_count} chars · rank ${d.rank}</span>
+    </div>
+  `).join("");
+}
+
+// ============================================================
+// ERROR BANNER
+// ============================================================
+function showError(msg) {
+  const banner = document.getElementById("errorBanner");
+  document.getElementById("errorMsg").textContent = msg;
+  banner.classList.remove("hidden");
+  banner.classList.add("flex");
+}
+
+// ============================================================
+// INSPECTOR
+// ============================================================
+const INSPECTOR_CONFIG = {
+  query_received:    { title: "Query Received",    subtitle: "Input node",           icon: "send",          color: "text-primary" },
+  entity_extraction: { title: "Entity Extraction", subtitle: "NLP entity tagging",   icon: "label",         color: "text-secondary" },
+  graph_search:      { title: "Graph Search",      subtitle: "Knowledge graph query", icon: "account_tree", color: "text-tertiary" },
+  embedding:         { title: "Embedding Engine",  subtitle: "nomic-embed-text",      icon: "schema",        color: "text-primary" },
+  vector_retrieval:  { title: "Vector Retrieval",  subtitle: "ChromaDB similarity",   icon: "manage_search", color: "text-secondary" },
+  context_builder:   { title: "Context Builder",   subtitle: "Graph + vector merge",  icon: "layers",        color: "text-tertiary" },
+  prompt_builder:    { title: "Prompt Builder",    subtitle: "System prompt assembly","icon": "edit_note",   color: "text-primary" },
+  llm_generation:    { title: "LLM Generation",    subtitle: "mistral via Ollama",    icon: "psychology",    color: "text-secondary" },
+  response_assembly: { title: "Response Assembly", subtitle: "Final output",          icon: "output",        color: "text-tertiary" },
+};
+
+function openInspector(nodeId) {
+  state.inspectedNode = nodeId;
+  const cfg   = INSPECTOR_CONFIG[nodeId] || { title: nodeId, subtitle: "", icon: "hub", color: "text-primary" };
+  const panel = document.getElementById("inspector");
+
+  document.getElementById("inspectorTitle").textContent    = cfg.title;
+  document.getElementById("inspectorTitle").className      = `font-headline font-bold text-base ${cfg.color}`;
+  document.getElementById("inspectorSubtitle").textContent = cfg.subtitle;
+
+  const iconEl = document.getElementById("inspectorIcon");
+  iconEl.className = `w-8 h-8 rounded-sm flex items-center justify-center ${cfg.color.replace("text-","bg-")}/10`;
+  iconEl.innerHTML = `<span class="material-symbols-outlined fill-icon text-lg ${cfg.color}">${cfg.icon}</span>`;
+
+  // Badges
+  const st = state.nodeStates[nodeId] || "idle";
+  const badgeMap = {
+    idle: "bg-slate-700 text-slate-400",
+    running: "bg-secondary/20 text-secondary border border-secondary/30",
+    waiting: "bg-primary/20 text-primary border border-primary/30",
+    completed: "bg-tertiary/20 text-tertiary border border-tertiary/30",
+    error: "bg-error/20 text-error border border-error/30",
+    warning: "bg-secondary/20 text-secondary border border-secondary/30",
+  };
+  document.getElementById("inspectorBadges").innerHTML = `
+    <span class="px-2 py-0.5 text-[9px] font-mono rounded-sm ${badgeMap[st] || "bg-slate-700 text-slate-400"}">
+      STATUS: ${st.toUpperCase()}
+    </span>
+  `;
+
+  panel.classList.remove("hidden-panel");
+  refreshInspector(nodeId);
+}
+
+function closeInspector() {
+  state.inspectedNode = null;
+  document.getElementById("inspector").classList.add("hidden-panel");
+}
+
+function showTab(tab) {
+  state.activeTab = tab;
+  ["overview","payload"].forEach(t => {
+    const btn = document.getElementById("tab-" + t);
+    if (t === tab) {
+      btn.className = "px-3 py-2.5 text-primary border-b-2 border-primary text-[10px] font-bold uppercase tracking-widest";
+    } else {
+      btn.className = "px-3 py-2.5 text-slate-500 hover:text-white text-[10px] font-bold uppercase tracking-widest transition-colors";
+    }
+  });
+  if (state.inspectedNode) refreshInspector(state.inspectedNode);
+}
+
+function refreshInspector(nodeId) {
+  const payload = state.nodePayloads[nodeId];
+  const body    = document.getElementById("inspectorBody");
+
+  if (state.activeTab === "payload") {
+    body.innerHTML = payload
+      ? `<pre class="text-[10px] font-mono text-on-surface-variant whitespace-pre-wrap break-words bg-surface-container-lowest p-3 rounded-sm border border-outline-variant/10">${JSON.stringify(payload, null, 2)}</pre>`
+      : `<p class="text-xs text-slate-600 italic">No data yet — node hasn't executed.</p>`;
+    return;
+  }
+
+  // Overview tab — node-specific rich display
+  if (!payload) {
+    body.innerHTML = `<p class="text-xs text-slate-600 italic">Node hasn't executed yet.</p>`;
+    return;
+  }
+
+  body.innerHTML = buildOverviewHTML(nodeId, payload);
+}
+
+function buildOverviewHTML(nodeId, p) {
+  const metric = (label, value, color="text-on-surface") =>
+    `<div class="flex justify-between items-center py-1.5 border-b border-outline-variant/10 last:border-0">
+      <span class="text-[10px] text-slate-500 uppercase tracking-tighter">${label}</span>
+      <span class="text-[11px] font-mono ${color}">${value}</span>
+    </div>`;
+
+  const section = (title, content) =>
+    `<div class="mb-5"><h5 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">${title}</h5>${content}</div>`;
+
+  const codeBlock = (text) =>
+    `<div class="bg-surface-container-lowest p-3 rounded-sm border border-outline-variant/10 font-mono text-[10px] text-on-surface-variant whitespace-pre-wrap break-words max-h-48 overflow-y-auto">${escHtml(text)}</div>`;
+
+  switch (nodeId) {
+
+    case "query_received":
+      return section("Input Query",
+        `<div class="p-3 bg-surface-container rounded-sm border border-primary/20 text-sm text-on-surface italic">"${escHtml(p.question || "")}"</div>
+         <div class="mt-3">` +
+        metric("Characters", p.char_count || 0) +
+        `</div>`
+      );
+
+    case "entity_extraction":
+      return section("Extracted Entities",
+        (p.entities || []).map(e =>
+          `<span class="inline-block px-2 py-0.5 bg-secondary/15 text-secondary border border-secondary/30 rounded text-[10px] font-mono m-0.5">${escHtml(e)}</span>`
+        ).join("") || `<p class="text-xs text-slate-600 italic">None found</p>`
+      ) + section("Metrics", metric("Entities Found", p.count || 0, "text-primary"));
+
+    case "graph_search":
+      return section("Knowledge Triples",
+        p.triples && p.triples.length
+          ? p.triples.slice(0, 10).map(t =>
+              `<div class="flex items-center gap-2 p-2 bg-surface-container rounded-sm mb-1.5 border border-outline-variant/10 text-[10px]">
+                <span class="text-primary font-mono">${escHtml(t.entity1)}</span>
+                <span class="text-slate-500 italic">${escHtml(t.relation)}</span>
+                <span class="text-tertiary font-mono">${escHtml(t.entity2)}</span>
+              </div>`
+            ).join("")
+          : `<p class="text-xs text-slate-600 italic">No triples found for these entities.</p>`
+      ) + section("Metrics",
+        metric("Triples Found", p.triples_found || 0) +
+        metric("Context Length", (p.graph_context_length || 0) + " chars")
+      );
+
+    case "embedding":
+      return section("Vector Preview",
+        `<div class="bg-surface-container-lowest p-2 rounded-sm border border-outline-variant/10 font-mono text-[9px] text-primary/70 break-all">
+          [${(p.vector_preview || []).map(v => v.toFixed(4)).join(", ")} ...]
+        </div>`
+      ) + section("Metrics",
+        metric("Model", p.model || "nomic-embed-text") +
+        metric("Dimensions", p.dimensions || "—", "text-secondary")
+      );
+
+    case "vector_retrieval":
+      return section("Top Matches",
+        (p.retrieved_docs || []).map((d,i) =>
+          `<div class="p-3 bg-surface-container-low rounded-sm border-l-2 ${i===0?"border-primary":"border-primary/30"} mb-2">
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[9px] font-mono text-primary">Rank ${d.rank}</span>
+              <span class="text-[9px] text-slate-500 font-mono">${d.char_count} chars</span>
+            </div>
+            <div class="text-[9px] font-mono text-secondary truncate mb-1">${escHtml(d.document)}</div>
+            <p class="text-[10px] text-slate-400 leading-snug line-clamp-3">${escHtml(d.text_preview)}</p>
+          </div>`
+        ).join("") || `<p class="text-xs text-slate-600 italic">No results.</p>`
+      ) + section("Metrics",
+        metric("Results", p.results_count || 0) +
+        (p.degraded ? `<div class="mt-2 flex items-center gap-2 text-error text-[10px]"><span class="material-symbols-outlined text-sm">warning</span>Degraded — no chunks retrieved</div>` : "")
+      );
+
+    case "context_builder":
+      return section("Context Preview", codeBlock(p.context_preview || "")) +
+        section("Metrics",
+          metric("Graph Triples", p.graph_triples || 0) +
+          metric("Vector Chunks", p.vector_chunks || 0) +
+          metric("Total Context", (p.total_context_chars || 0) + " chars")
+        );
+
+    case "prompt_builder":
+      return section("Prompt Preview", codeBlock(p.prompt_preview || "")) +
+        section("Metrics",
+          metric("Prompt Length", (p.prompt_length_chars || 0) + " chars") +
+          metric("Approx Tokens", "~" + (p.approx_tokens || 0), "text-secondary")
+        );
+
+    case "llm_generation":
+      return section("Answer",
+        `<div class="p-3 bg-surface-container-low rounded-sm border border-primary/20 text-sm text-on-surface leading-relaxed">${escHtml(p.answer_preview || "")}</div>`
+      ) + section("Metrics",
+        metric("Model", p.model || "mistral") +
+        metric("Answer Length", (p.answer_length_chars || 0) + " chars") +
+        metric("Output Tokens", "~" + (p.approx_output_tokens || 0), "text-tertiary")
+      );
+
+    case "response_assembly":
+      return section("Final Answer",
+        `<div class="p-3 bg-surface-container-low rounded-sm border border-tertiary/30 text-sm text-on-surface leading-relaxed">${escHtml(p.answer || "")}</div>`
+      ) + section("Sources",
+        (p.sources || []).map(s =>
+          `<div class="flex items-start gap-2 p-2 bg-surface-container rounded-sm mb-1.5 border border-outline-variant/10">
+            <span class="material-symbols-outlined text-primary/60 text-sm mt-0.5">description</span>
+            <div><div class="text-[9px] font-mono text-secondary">${escHtml(s.document)}</div>
+            <p class="text-[9px] text-slate-500 line-clamp-2">${escHtml(s.text)}</p></div>
+          </div>`
+        ).join("")
+      );
+
+    default:
+      return codeBlock(JSON.stringify(p, null, 2));
+  }
+}
+
+function escHtml(str) {
+  return String(str || "")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
+}
+
+// ============================================================
+// STEP MODE TOGGLE
+// ============================================================
+function toggleStepMode() {
+  state.stepMode = !state.stepMode;
+  const knob    = document.getElementById("stepModeKnob");
+  const toggle  = document.getElementById("stepModeToggle");
+  const hint    = document.getElementById("stepHint");
+  const ctrls   = document.getElementById("stepControls");
+
+  if (state.stepMode) {
+    toggle.classList.add("bg-primary/30");
+    knob.style.transform   = "translateX(16px)";
+    knob.classList.replace("bg-slate-500","bg-primary");
+    hint.classList.remove("hidden");
+    ctrls.classList.remove("hidden");
+  } else {
+    toggle.classList.remove("bg-primary/30");
+    knob.style.transform   = "";
+    knob.classList.replace("bg-primary","bg-slate-500");
+    hint.classList.add("hidden");
+    ctrls.classList.add("hidden");
+  }
+}
+
+// ============================================================
+// NEXT STEP
+// ============================================================
+async function sendNextStep() {
+  if (!state.runId) return;
+  await fetch("/simulator/next-step", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ run_id: state.runId })
+  });
+}
+
+// ============================================================
+// START RUN
+// ============================================================
+async function startRun() {
+  const question = document.getElementById("queryInput").value.trim();
+  if (!question) {
+    alert("Enter a query first.");
+    return;
+  }
+
+  // Reset state
+  resetVisuals();
+  state.running     = true;
+  state.paused      = false;
+  state.completedSteps = [];
+  state.currentStep = null;
+  state.nodePayloads = {};
+
+  setStatus("Starting...", "bg-secondary animate-pulse");
+  setFlowStatus("INITIALIZING", "bg-secondary");
+  document.getElementById("playPauseIcon").textContent = "pause_circle";
+  document.getElementById("errorBanner").classList.add("hidden");
+  document.getElementById("reasoningTrace").innerHTML = "";
+  document.getElementById("retrievedChunks").innerHTML = `<p class="text-[10px] text-slate-600 italic">Awaiting retrieval...</p>`;
+  ["ctx-entities","ctx-triples","ctx-dims","ctx-tokens"].forEach(id => {
+    document.getElementById(id).textContent = "—";
+  });
+
+  // POST to start run
+  const res  = await fetch("/simulator/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, step_mode: state.stepMode })
+  });
+  const data = await res.json();
+  state.runId = data.run_id;
+
+  document.getElementById("runIdDisplay").textContent = "run: " + state.runId.slice(0,8) + "...";
+  setStatus("Running", "bg-secondary animate-pulse");
+
+  // Open SSE stream
+  if (state.eventSource) state.eventSource.close();
+  const es = new EventSource("/simulator/stream/" + state.runId);
+  state.eventSource = es;
+
+  es.onmessage = (evt) => {
+    try {
+      const event = JSON.parse(evt.data);
+      handleEvent(event);
+    } catch (e) { /* ping / keep-alive */ }
+  };
+
+  es.onerror = () => {
+    if (state.running) {
+      setStatus("Disconnected", "bg-error");
+      setFlowStatus("DISCONNECTED", "bg-error");
+    }
+    es.close();
+  };
+}
+
+// ============================================================
+// PLAY / PAUSE
+// ============================================================
+function togglePlayPause() {
+  const icon = document.getElementById("playPauseIcon").textContent.trim();
+  if (icon === "replay") {
+    // Start fresh
+    document.getElementById("playPauseIcon").textContent = "play_circle";
+    return;
+  }
+  // We don't actually pause the SSE stream — just toggle UI hint
+  state.paused = !state.paused;
+  document.getElementById("playPauseIcon").textContent = state.paused ? "play_circle" : "pause_circle";
+}
+
+// ============================================================
+// REWIND / SKIP
+// ============================================================
+function rewindRun() {
+  resetVisuals();
+  document.getElementById("reasoningTrace").innerHTML = "";
+}
+
+function skipToEnd() {
+  // Advance all pending step gates
+  if (state.runId && state.stepMode) {
+    // Send multiple next-step clicks rapidly
+    let count = 0;
+    const interval = setInterval(async () => {
+      if (!state.running || count++ > 20) { clearInterval(interval); return; }
+      await sendNextStep();
+    }, 200);
+  }
+}
+
+// ============================================================
+// RESET VISUALS
+// ============================================================
+function resetVisuals() {
+  NODES.forEach(n => { state.nodeStates[n.id] = "idle"; });
+  state.completedSteps = [];
+  state.currentStep = null;
+  renderGraph();
+  renderTimeline();
+  document.getElementById("timelineProgress").style.width = "0%";
+  document.getElementById("playhead").style.left = "0%";
+  document.getElementById("latencyBar").style.width = "0%";
+  document.getElementById("lastLatency").textContent = "—";
+}
+
+// ============================================================
+// ZOOM
+// ============================================================
+function zoom(factor) {
+  state.scale = Math.min(2, Math.max(0.4, state.scale * factor));
+  applyTransform();
+}
+
+function resetZoom() {
+  state.scale = 1;
+  state.translateX = 0;
+  state.translateY = 0;
+  applyTransform();
+}
+
+function applyTransform() {
+  const canvas = document.getElementById("graphCanvas");
+  // Apply to both layers via a wrapper
+  const nodeLayer = document.getElementById("nodeLayer");
+  const edgeLayer = document.getElementById("edgeLayer");
+  const t = `scale(${state.scale}) translate(${state.translateX}px, ${state.translateY}px)`;
+  nodeLayer.style.transform = t;
+  edgeLayer.style.transform = t;
+  nodeLayer.style.transformOrigin = "center center";
+  edgeLayer.style.transformOrigin = "center center";
+}
+
+// ============================================================
+// REPLAY MODAL
+// ============================================================
+async function loadRuns() {
+  const res  = await fetch("/simulator/runs");
+  const data = await res.json();
+  const list = document.getElementById("runsList");
+
+  if (!data.runs || data.runs.length === 0) {
+    list.innerHTML = `<p class="text-xs text-slate-600 italic">No runs recorded yet.</p>`;
+    return;
+  }
+
+  list.innerHTML = data.runs.slice().reverse().map(id =>
+    `<div class="flex items-center justify-between p-3 bg-surface-container rounded-sm border border-outline-variant/10 hover:border-primary/40 transition-colors">
+      <span class="text-xs font-mono text-on-surface-variant">${id.slice(0,16)}...</span>
+      <button onclick="replayRun('${id}')"
+        class="px-3 py-1 bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-bold uppercase tracking-widest rounded-sm border border-primary/30 transition-colors">
+        Replay
+      </button>
+    </div>`
+  ).join("");
+}
+
+async function replayRun(runId) {
+  document.getElementById("replayModal").classList.add("hidden");
+  resetVisuals();
+  state.runId = runId;
+  state.running = true;
+  state.completedSteps = [];
+  document.getElementById("reasoningTrace").innerHTML = "";
+  setStatus("Replaying", "bg-primary");
+  setFlowStatus("REPLAY", "bg-primary");
+  document.getElementById("runIdDisplay").textContent = "replay: " + runId.slice(0,8) + "...";
+
+  // Use the replay snapshot via stream endpoint (it sends all events at once)
+  if (state.eventSource) state.eventSource.close();
+  const es = new EventSource("/simulator/stream/" + runId);
+  state.eventSource = es;
+
+  es.onmessage = async (evt) => {
+    try {
+      const event = JSON.parse(evt.data);
+      handleEvent(event);
+      // Slow replay for visual effect
+      await new Promise(r => setTimeout(r, 80));
+    } catch (e) {}
+  };
+  es.onerror = () => es.close();
+}
+
+// Open replay modal -> load runs
+document.getElementById("replayModal").addEventListener("click", e => {
+  if (e.target === document.getElementById("replayModal")) {
+    document.getElementById("replayModal").classList.add("hidden");
+  }
+});
+
+// Load run list when modal opens
+const replayBtn = document.querySelector('[onclick*="replayModal"]');
+if (replayBtn) {
+  replayBtn.addEventListener("click", loadRuns);
+}
+// Also trigger on the actual open-button (which calls the inline onclick)
+document.querySelectorAll('[onclick*="replayModal"]').forEach(b => {
+  b.addEventListener("click", loadRuns);
+});
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener("resize", () => {
+  renderGraph();
+  renderTimeline();
+});
+
+// Keyboard shortcuts
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeInspector();
+  if (e.key === "Enter" && e.ctrlKey) startRun();
+  if (e.key === "ArrowRight" && state.stepMode) sendNextStep();
+});
+
+// Initial render
+NODES.forEach(n => { state.nodeStates[n.id] = "idle"; });
+renderGraph();
+renderTimeline();
+</script>
+</body>
+</html>

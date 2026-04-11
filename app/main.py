@@ -7,6 +7,7 @@ from app.api.query import router as query_router
 from app.api.debug import router as debug_router
 from app.api.graph import router as graph_router
 from app.api.graph_view import router as graph_view_router
+from app.api.simulator import router as simulator_router
 
 app = FastAPI(title="Atlas AI")
 
@@ -15,6 +16,7 @@ app.include_router(query_router)
 app.include_router(debug_router)
 app.include_router(graph_router)
 app.include_router(graph_view_router)
+app.include_router(simulator_router)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
@@ -26,3 +28,7 @@ def home():
 @app.get("/vectors-ui")
 def vectors_page():
     return FileResponse("app/static/vectors.html")
+
+@app.get("/simulator")
+def simulator_page():
+    return FileResponse("app/static/simulator.html")
