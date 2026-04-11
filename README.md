@@ -1,123 +1,167 @@
-# ATLAS AI — Glass Box RAG System
+# ATLAS AI — Local LLM Observability & RAG Debugger
 
-A fully local, open-source Retrieval-Augmented Generation system with a live knowledge graph, step-by-step pipeline visualiser, and zero cloud dependency. Every inference call stays on your machine.
+A fully local, open-source system to **see, inspect, and debug how RAG pipelines actually work**.
+
+ATLAS is not just another chatbot.
+
+It is a **glass-box AI system** that lets you:
+
+* Trace every stage of retrieval and generation
+* Inspect intermediate data (chunks, entities, scores, prompts)
+* Replay full pipeline executions
+* Visualise knowledge as a live graph
+
+> If you've ever wondered *"what exactly happened inside my RAG system?"* — ATLAS shows you.
 
 ![Chat Home](static/images/Chat%20Home.png)
 
 ---
 
-## What is ATLAS?
+## Why ATLAS?
 
-Most RAG systems are black boxes — you ask a question and get an answer with no visibility into how it was retrieved or reasoned about. ATLAS is different.
+Most RAG systems are black boxes.
 
-- **Glass box pipeline** — watch every stage of retrieval execute in real time
-- **Knowledge graph** — entities and relationships extracted from your documents, visualised as a live force-directed graph
-- **Dual retrieval** — vector similarity search + graph traversal combined into a single context window
-- **100% local** — powered by [Ollama](https://ollama.com). No API keys, no data leaving your machine
+You send a query → you get an answer → everything in between is hidden.
+
+ATLAS turns that into a **fully observable pipeline**.
+
+### What makes ATLAS different
+
+* **Full pipeline observability**
+  Every stage (embedding, retrieval, graph traversal, context building, generation) is visible and inspectable.
+
+* **Execution replay system**
+  Re-run and step through past queries like a debugger.
+
+* **Node-level inspection**
+  Click any stage to see:
+
+  * Retrieved chunks
+  * Similarity scores
+  * Extracted entities
+  * Prompt sent to the LLM
+
+* **Dual retrieval engine**
+  Combines:
+
+  * Vector search (semantic similarity)
+  * Knowledge graph traversal (relationships)
+
+* **Live knowledge graph**
+  Documents become entities + relationships, visualised in real time.
+
+* **100% local**
+  Powered by Ollama — no APIs, no data leaving your machine.
+
+---
+
+## Who is this for?
+
+* AI engineers building RAG systems
+* Developers who want to understand how LLM pipelines work
+* Teams working on explainable AI
+* Anyone tired of black-box AI behavior
+
+---
+
+## What you can do with ATLAS
+
+* Debug why your RAG system gave a wrong answer
+* Inspect retrieval quality (chunks, scores, context)
+* Understand graph-based retrieval
+* Teach RAG concepts visually
+* Experiment with pipeline design
 
 ---
 
 ## Screenshots
 
 ### Chat
-Ask questions against your indexed documents. The right panel shows session context — which documents are loaded, last query, retrieved chunks, and a link to the knowledge graph.
 
-| Home | Answer + Sources |
-|------|-----------------|
+| Home                                        | Answer + Sources                                                             |
+| ------------------------------------------- | ---------------------------------------------------------------------------- |
 | ![Chat Home](static/images/Chat%20Home.png) | ![Chat Answer](static/images/Chat%20Question%20answer%20and%20documents.png) |
 
 ### Document Indexing
-Upload a PDF and watch the progress bar track each stage of the pipeline in real time — chunking, embedding, entity extraction, relationship extraction, graph storage.
 
-| Indexing in Progress | Indexed |
-|----------------------|---------|
+| Indexing                                                               | Indexed                                                 |
+| ---------------------------------------------------------------------- | ------------------------------------------------------- |
 | ![Indexing](static/images/Chat%20Document%20indexing%20inprogress.png) | ![Indexed](static/images/Chat%20Document%20indexed.png) |
 
 ### Pipeline Simulator
-Step through every node of the RAG pipeline visually. See exactly which chunks were retrieved, what entities were extracted, how the context was assembled, and what the LLM received.
 
-| Home | In Progress | Completed |
-|------|-------------|-----------|
+| Home                                            | Progress                                                     | Completed                                            |
+| ----------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------- |
 | ![Sim Home](static/images/Simulator%20Home.png) | ![Sim Progress](static/images/Simulator%20in%20progress.png) | ![Sim Done](static/images/Simulator%20Completed.png) |
 
-Click any pipeline node to inspect its full payload — vector previews, entity lists, similarity scores, prompt fragments, and LLM output.
+### Node Inspection
 
-| Node Inspect | Paused |
-|--------------|--------|
+| Inspect                                                | Paused                                          |
+| ------------------------------------------------------ | ----------------------------------------------- |
 | ![Node](static/images/Simulator%20Node%20Selected.png) | ![Paused](static/images/Simulator%20Paused.png) |
 
 ### Knowledge Graph
-All entities and relationships extracted from your documents rendered as an interactive force-directed graph. Updates live as you index new documents — no page reload needed.
 
-| Full Graph | Zoomed + Entity Selected |
-|------------|--------------------------|
+| Full                                                     | Zoom  + Selected                                                                     |
+| -------------------------------------------------------- | -------------------------------------------------------------------------- |
 | ![Graph](static/images/Graph%20Visualization%20Main.png) | ![Graph Zoom](static/images/Graph%20Visualization%20Zoomed%20Selected.png) |
 
-Pan, zoom, and click any node to see all its relationships and connected documents in the side panel.
+---
 
-![Graph Zoomed](static/images/Graph%20Visualization%20Zoomerd.png)
+## Capabilities
+
+> ⚠️ ATLAS is designed for **transparency and debugging**, not just answering questions.
+
+| Capability              | Detail                     |
+| ----------------------- | -------------------------- |
+| PDF ingestion           | Upload and index documents |
+| Chunked embedding       | nomic-embed-text           |
+| Entity extraction       | LLM-based                  |
+| Relationship extraction | Triples stored in SQLite   |
+| Vector search           | ChromaDB                   |
+| Graph search            | Entity traversal           |
+| Context fusion          | Vector + graph             |
+| Pipeline simulator      | Step-by-step execution     |
+| Replay system           | Re-run pipelines           |
+| Live updates            | SSE-driven                 |
+| Model switching         | Runtime selection          |
+| Deduplication           | Graph constraints          |
 
 ---
 
-## Features
+## Core Innovation
 
-| Feature | Detail |
-|---------|--------|
-| PDF ingestion | Upload and index any PDF |
-| Chunked embedding | Text split into overlapping chunks, embedded with `nomic-embed-text` |
-| Entity extraction | Named entities pulled from each chunk via LLM |
-| Relationship extraction | Subject → predicate → object triples stored in SQLite |
-| Vector search | ChromaDB similarity search with distance scores |
-| Graph search | Keyword traversal across the entity graph |
-| Dual context fusion | Vector + graph context merged before LLM call |
-| Live progress bar | SSE-driven real-time indexing stages with percentages |
-| Pipeline simulator | Node-by-node visual playback with pause/resume |
-| Run replay | Re-watch any previous pipeline run |
-| Live graph updates | Knowledge graph updates in browser as documents are indexed |
-| Model switcher | Switch Ollama chat models on the fly in Chat and Simulator |
-| Duplicate deduplication | Graph DB enforces `UNIQUE(entity1, relation, entity2)` |
-| Flush tool | Hidden dev tool to wipe vector + graph DB without touching files |
+ATLAS introduces **pipeline instrumentation for LLM systems**.
+
+Instead of a single opaque flow, every step is:
+
+* Captured as an event
+* Streamed in real-time
+* Stored for replay
+* Visualised in the UI
+
+This enables:
+
+* Time-travel debugging for AI pipelines
+* Fine-grained inspection of intermediate states
+* Understanding *why* an answer was generated
 
 ---
 
-## Architecture
+## Architecture Overview
+
+ATLAS splits the RAG pipeline into observable stages.
 
 ```
-Upload PDF
-    │
-    ▼
-┌─────────────┐
-│   Chunking  │  pypdf → fixed-size overlapping text chunks
-└──────┬──────┘
-       │
-       ▼
-┌─────────────────┐
-│   Embedding     │  nomic-embed-text via Ollama
-└──────┬──────────┘
-       │
-       ├──────────────────────────────┐
-       ▼                              ▼
-┌─────────────┐              ┌──────────────────────┐
-│  ChromaDB   │              │  Entity Extraction   │  LLM → named entities
-│ (vector_db) │              └──────────┬───────────┘
-└─────────────┘                         │
-                                        ▼
-                              ┌──────────────────────┐
-                              │ Relation Extraction  │  LLM → (e1, rel, e2) triples
-                              └──────────┬───────────┘
-                                         │
-                                         ▼
-                               ┌──────────────────┐
-                               │  SQLite graph.db │
-                               └──────────────────┘
-
-Query
-    │
-    ├─── Vector search (ChromaDB)
-    ├─── Graph search (SQLite LIKE traversal)
-    │
-    ▼
-Context assembly → LLM → Answer
+User Query
+   ↓
+Embedding
+   ↓
+Vector Search ─┐
+               ├──→ Context Fusion → LLM
+Graph Search ──┘
+   ↓
+Pipeline Events → UI + Replay System
 ```
 
 ---
@@ -128,14 +172,9 @@ Context assembly → LLM → Answer
 
 ```bash
 python --version
-# Python 3.11.x
 ```
 
-Download: https://www.python.org/downloads/
-
 ### Ollama
-
-Download and install from https://ollama.com, then verify:
 
 ```bash
 ollama --version
@@ -145,113 +184,46 @@ ollama --version
 
 ## Quick Start
 
-### 1. Pull models
-
 ```bash
 ollama pull mistral
 ollama pull nomic-embed-text
-```
 
-`mistral` is used for chat, entity extraction, and relationship extraction.  
-`nomic-embed-text` is the embedding model.
-
-Any other Ollama chat model can be switched to at runtime via the model picker in the UI. To use a smaller/faster model as default, set:
-
-```bash
-# Linux / macOS
-export ATLAS_MODEL=llama3.2
-
-# Windows (PowerShell)
-$env:ATLAS_MODEL = "llama3.2"
-```
-
-### 2. Clone the repo
-
-```bash
 git clone https://github.com/cyberhades21/atlas-ai.git
 cd atlas-ai
-```
 
-### 3. Create and activate a virtual environment
+python -m venv venv
+source venv/bin/activate  # or Windows equivalent
 
-```bash
-# Windows
-py -3.11 -m venv venv
-venv\Scripts\activate
-
-# macOS / Linux
-python3.11 -m venv venv
-source venv/bin/activate
-```
-
-### 4. Install dependencies
-
-```bash
 pip install -r requirements.txt
-```
-
-### 5. Start the server
-
-```bash
 uvicorn app.main:app --reload
 ```
 
-Open your browser at:
-
-```
-http://localhost:8000
-```
-
-That's it. No `.env` file, no configuration, no database migrations.
+Open: http://localhost:8000
 
 ---
 
 ## Pages
 
-| URL | Description |
-|-----|-------------|
-| `http://localhost:8000` | Chat interface |
-| `http://localhost:8000/simulator` | Pipeline visualiser |
-| `http://localhost:8000/graph-view` | Knowledge graph |
-| `http://localhost:8000/docs` | FastAPI Swagger UI |
+* `/` → Chat
+* `/simulator` → Pipeline debugger
+* `/graph-view` → Knowledge graph
+* `/docs` → API
 
 ---
 
 ## Usage
 
-### Indexing a document
+### Indexing
 
-1. Click **Upload Doc** in the top navbar
-2. Choose a PDF file
-3. Click **Index Document**
-4. Watch the progress bar track each pipeline stage
+Upload PDF → watch pipeline execute live.
 
-The knowledge graph at `/graph-view` will update live as relationships are extracted.
+### Query
 
-### Asking questions
+Ask → inspect retrieval + context.
 
-Type any question in the chat input and press **Send**. The right panel shows:
-- Which documents contributed context
-- Retrieved chunks with similarity scores
-- Links to the knowledge graph
+### Simulator
 
-### Switching models
-
-Click the model badge (bottom-left of the chat input) to open the model picker. Only chat-capable models from `ollama list` are shown — embedding models are filtered out automatically.
-
-### Using the Simulator
-
-1. Go to `/simulator`
-2. Type a question in **Reference Query**
-3. Click **Run Execution**
-4. Watch each pipeline node light up as it executes
-5. Click any node to inspect its full data payload
-6. Use the **pause** button to freeze the visualisation mid-run
-7. Use **Replay** to re-watch any previous run
-
-### Flushing all data (dev tool)
-
-Triple-click the **ATLAS AI** logo in the top-left within 600ms. A hidden **Flush** button appears in the navbar. This wipes all vector embeddings and graph relationships from the database without deleting uploaded PDF files.
+Run → pause → inspect → replay.
 
 ---
 
@@ -259,116 +231,55 @@ Triple-click the **ATLAS AI** logo in the top-left within 600ms. A hidden **Flus
 
 ```
 atlas-ai/
-├── app/
-│   ├── main.py                  # FastAPI app, router registration
-│   ├── api/
-│   │   ├── documents.py         # Upload + SSE progress endpoint
-│   │   ├── query.py             # Chat query endpoint
-│   │   ├── graph.py             # Graph data + live SSE updates
-│   │   ├── graph_view.py        # Serves graph.html
-│   │   ├── simulator.py         # Simulator run/stream/replay endpoints
-│   │   ├── models.py            # Ollama model list endpoint
-│   │   └── admin.py             # Flush endpoint (dev tool)
-│   ├── pipeline/
-│   │   ├── events.py            # Per-run SSE event bus (simulator)
-│   │   ├── ingest_progress.py   # Per-task SSE progress bus (indexing)
-│   │   ├── graph_updates.py     # Live graph broadcast bus
-│   │   └── instrumented_query.py# Query pipeline with event emission
-│   ├── services/
-│   │   ├── ingestion_service.py # Full ingest pipeline orchestration
-│   │   └── query_service.py     # Query pipeline orchestration
-│   ├── storage/
-│   │   ├── vector_store.py      # ChromaDB wrapper (lazy init)
-│   │   ├── graph_store.py       # SQLite relationships (dedup enforced)
-│   │   └── entity_store.py      # Entity persistence
-│   ├── ai/
-│   │   ├── llm.py               # Ollama generate wrapper + timeout
-│   │   ├── embeddings.py        # Embedding via nomic-embed-text
-│   │   ├── chunking.py          # PDF text chunking
-│   │   ├── entity_extractor.py  # LLM-based entity extraction
-│   │   └── relationship_extractor.py # LLM triple extraction
-│   └── static/
-│       ├── index.html           # Chat UI
-│       ├── simulator.html       # Pipeline visualiser UI
-│       └── graph.html           # Knowledge graph UI
-├── data/                        # Created at runtime
-│   ├── documents/               # Uploaded PDFs
-│   ├── vector_db/               # ChromaDB files
-│   └── graph.db                 # SQLite graph database
-├── static/
-│   └── images/                  # Screenshots
-├── requirements.txt
-└── README.md
+  app/
+    ai/
+    pipeline/
+    services/
+    api/
+    storage/
+    static/
+  data/
+  static/images/
 ```
 
 ---
 
 ## Environment Variables
 
-All variables are optional — the defaults work out of the box.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ATLAS_MODEL` | `mistral` | Default Ollama chat model |
-| `LLM_TIMEOUT` | `120` | Seconds before an LLM call times out |
+| Variable    | Default |
+| ----------- | ------- |
+| ATLAS_MODEL | mistral |
+| LLM_TIMEOUT | 120     |
 
 ---
 
 ## Recommended Models
 
-Small models that run well on CPU or modest GPU:
-
-| Model | Pull command | Notes |
-|-------|-------------|-------|
-| `mistral` | `ollama pull mistral` | Default. Good balance of speed and quality |
-| `llama3.2` | `ollama pull llama3.2` | Fast, strong reasoning |
-| `llama3.2:1b` | `ollama pull llama3.2:1b` | Very fast, lower quality |
-| `phi3:mini` | `ollama pull phi3:mini` | ~2GB, runs on CPU |
-| `gemma3:1b` | `ollama pull gemma3:1b` | ~800MB, minimal RAM |
-| `nomic-embed-text` | `ollama pull nomic-embed-text` | Required embedding model |
+* mistral
+* llama3.2
+* phi3:mini
+* gemma3:1b
+* nomic-embed-text
 
 ---
 
-## Resetting Data
+## Reset Data
 
-### Via the UI
-Triple-click **ATLAS AI** logo → click **Flush** → confirm. Wipes vectors and graph, keeps PDFs.
-
-### Via the filesystem
+UI: triple-click logo → Flush
+CLI:
 
 ```bash
-# Stop the server first (Ctrl+C), then:
-
-# Windows
-rmdir /s data
-
-# macOS / Linux
 rm -rf data
 ```
 
-Restart the server — the `data/` directory and database are recreated automatically on first use.
-
 ---
 
-## API Reference
+## API
 
-The full interactive API docs are available at `http://localhost:8000/docs` when the server is running.
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/documents/upload` | Upload and index a PDF |
-| `GET` | `/documents/progress/{task_id}` | SSE stream of indexing progress |
-| `POST` | `/query` | Ask a question |
-| `GET` | `/graph` | Get all nodes and edges |
-| `GET` | `/graph/updates` | SSE stream of live graph updates |
-| `GET` | `/models` | List available Ollama chat models |
-| `GET` | `/simulator/runs` | List past simulator runs |
-| `POST` | `/simulator/run` | Start a new simulator run |
-| `GET` | `/simulator/stream/{run_id}` | SSE stream of simulator events |
-| `DELETE` | `/admin/flush` | Wipe all vector and graph data |
+Available at `/docs`
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT
