@@ -2,6 +2,10 @@
 
 A fully local, open-source Retrieval-Augmented Generation system with a **live knowledge graph, step-by-step pipeline visualiser, and full execution observability**.
 
+## Demo
+
+![Simulator Demo](static/images/Demonstration.gif)
+
 ATLAS is not just another chatbot.
 
 It is a **glass-box AI system** that lets you:
