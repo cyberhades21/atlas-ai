@@ -1,49 +1,107 @@
+"""
+Core RAG pipeline logic.
+
+FIX #4 — single source of truth:
+    Previously `instrumented_query.py` contained a near-verbatim copy of the
+    pipeline defined here.  Any change to the prompt, top_k default, model
+    name, or context-merging strategy had to be applied in two places; it was
+    inevitable that they would diverge.
+
+    Fix: each pipeline stage is now a standalone function exported from this
+    module.  `answer_query()` composes them for the plain /query endpoint.
+    `instrumented_query.py` imports and calls the same functions so there is
+    exactly one implementation of the logic.
+
+Stage functions
+---------------
+run_entity_extraction(question)  -> list[str]
+run_graph_search(entities)       -> (str, list[dict])
+run_embedding(question)          -> list[float]
+run_vector_retrieval(embedding, n_results) -> (list[str], list[dict])
+run_context_builder(graph_ctx, chunks)     -> str
+run_prompt_builder(context, question)      -> str
+"""
+
+import logging
+
 from app.ai.embeddings import embed_query
 from app.storage.vector_store import search
-from app.ai.llm import generate_answer
+from app.ai.llm import generate_answer, DEFAULT_MODEL
 from app.ai.entity_extractor import extract_entities
 from app.storage.graph_store import search_relationships
 
+logger = logging.getLogger(__name__)
 
-def answer_query(question):
+DEFAULT_TOP_K = 5
 
-    # Step 1: extract entities from the question
-    entities = extract_entities(question)
 
-    # Step 2: search knowledge graph
+# ---------------------------------------------------------------------------
+# Individual stage functions — imported by instrumented_query.py
+# ---------------------------------------------------------------------------
+
+def run_entity_extraction(question: str) -> list:
+    return extract_entities(question)
+
+
+def run_graph_search(entities: list) -> tuple:
+    """Returns (graph_context_str, list_of_triple_dicts)."""
     graph_context = ""
-
+    graph_triples = []
     for entity in entities:
-
         relations = search_relationships(entity)
-
         for a, r, b in relations:
             graph_context += f"{a} {r} {b}\n"
+            graph_triples.append({"entity1": a, "relation": r, "entity2": b})
+    return graph_context, graph_triples
 
-    # Step 3: vector search
-    query_embedding = embed_query(question)
 
-    chunks, metadata = search(query_embedding)
+def run_embedding(question: str) -> list:
+    return embed_query(question)
 
+
+def run_vector_retrieval(embedding: list, n_results: int = DEFAULT_TOP_K) -> tuple:
+    """Returns (chunks, metadatas).  metadatas include _distance key."""
+    return search(embedding, n_results=n_results)
+
+
+def run_context_builder(graph_context: str, chunks: list) -> str:
     vector_context = "\n\n".join(chunks)
+    return graph_context + "\n\n" + vector_context
 
-    # Step 4: combine contexts
-    context = graph_context + "\n\n" + vector_context
 
-    # Step 5: generate answer
-    answer = generate_answer(context, question)
+def run_prompt_builder(context: str, question: str) -> str:
+    return (
+        "Answer using ONLY the context below.\n\n"
+        'If the answer is not found, say "Not found in documents".\n\n'
+        f"Context:\n{context}\n\nQuestion:\n{question}"
+    )
 
-    sources = []
 
-    for i in range(len(chunks)):
-        sources.append({
-            "document": metadata[i]["document"],
-            "text": chunks[i][:300]
-        })
+# ---------------------------------------------------------------------------
+# Composed pipeline — used by the plain /query endpoint
+# ---------------------------------------------------------------------------
+
+def answer_query(
+    question: str,
+    top_k: int = DEFAULT_TOP_K,
+    model: str = DEFAULT_MODEL,
+) -> dict:
+    entities = run_entity_extraction(question)
+    graph_context, _ = run_graph_search(entities)
+    embedding = run_embedding(question)
+    chunks, metadata = run_vector_retrieval(embedding, n_results=top_k)
+    context = run_context_builder(graph_context, chunks)
+    answer = generate_answer(context, question, model=model)
+
+    sources = [
+        {"document": meta["document"], "text": chunk[:300]}
+        for chunk, meta in zip(chunks, metadata)
+    ]
 
     return {
         "answer": answer,
         "entities": entities,
         "graph_context": graph_context,
-        "sources": sources
+        "sources": sources,
+        "model": model,
     }

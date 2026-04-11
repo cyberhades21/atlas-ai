@@ -8,6 +8,6 @@ router = APIRouter()
 @router.get("/graph-view", response_class=HTMLResponse)
 def graph_page():
 
-    html = Path("app/static/graph.html").read_text()
+    html = Path("app/static/graph.html").read_text(encoding="utf-8")
 
     return HTMLResponse(html)

@@ -1,162 +1,682 @@
 <!DOCTYPE html>
-<html>
-
+<html class="dark" lang="en">
 <head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ATLAS AI | Knowledge Assistant</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "on-background":          "#dfe2f1",
+        "surface":                "#0f131d",
+        "outline-variant":        "#424754",
+        "surface-bright":         "#353944",
+        "on-secondary":           "#472a00",
+        "surface-container-low":  "#171b26",
+        "on-primary-container":   "#00285d",
+        "outline":                "#8c909f",
+        "surface-container":      "#1c1f2a",
+        "secondary-container":    "#ee9800",
+        "tertiary":               "#4edea3",
+        "on-surface":             "#dfe2f1",
+        "on-error":               "#690005",
+        "primary":                "#adc6ff",
+        "surface-variant":        "#313540",
+        "surface-container-highest": "#313540",
+        "surface-container-lowest":  "#0a0e18",
+        "background":             "#0f131d",
+        "secondary":              "#ffb95f",
+        "error":                  "#ffb4ab",
+        "primary-container":      "#4d8eff",
+        "tertiary-container":     "#00a572",
+        "on-primary":             "#002e6a",
+        "primary-fixed-dim":      "#adc6ff",
+        "surface-container-high": "#262a35",
+        "on-surface-variant":     "#c2c6d6",
+        "error-container":        "#93000a",
+        "on-error-container":     "#ffdad6",
+      },
+      borderRadius: {
+        DEFAULT: "0.125rem",
+        lg:   "0.25rem",
+        xl:   "0.5rem",
+        full: "0.75rem",
+      },
+      fontFamily: {
+        headline: ["Space Grotesk"],
+        body:     ["Inter"],
+        label:    ["Inter"],
+        mono:     ["JetBrains Mono"],
+      },
+    },
+  },
+}
+</script>
+<style>
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+  .fill-icon { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
 
-<title>Atlas AI</title>
-<link rel="stylesheet" href="/static/style.css">
+  /* Dot grid background */
+  .grid-bg {
+    background-image: radial-gradient(circle at 1px 1px, rgba(66,71,84,0.35) 1px, transparent 0);
+    background-size: 40px 40px;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar       { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #313540; border-radius: 2px; }
+
+  /* Typing cursor blink */
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .cursor { animation: blink 1s step-end infinite; }
+
+  /* Subtle AI message entrance */
+  @keyframes fadeUp {
+    from { opacity:0; transform: translateY(6px); }
+    to   { opacity:1; transform: translateY(0); }
+  }
+  .msg-enter { animation: fadeUp 0.25s ease forwards; }
+
+  /* Glow on send button */
+  .send-glow:hover {
+    box-shadow: 0 0 14px rgba(173,198,255,0.3);
+  }
+
+  /* Upload progress bar — driven by real SSE events, no fake animation */
+  #uploadProgressBar { transition: width 0.4s ease, background-color 0.3s; }
+
+  /* Model picker dropdown */
+  #modelDropdown {
+    transform-origin: top left;
+    transition: opacity 0.15s, transform 0.15s;
+  }
+  #modelDropdown.hidden {
+    opacity: 0;
+    transform: scaleY(0.9);
+    pointer-events: none;
+  }
+</style>
 </head>
+<body class="bg-surface text-on-background font-body h-screen flex flex-col overflow-hidden">
 
-<body>
+<!-- ══════════════════════════════════════════════════════════════ TOPNAV -->
+<header class="bg-surface-container-low border-b border-outline-variant/10 shrink-0 z-50">
+  <div class="flex justify-between items-center px-6 py-3">
+    <!-- Brand + Nav -->
+    <div class="flex items-center gap-8">
+      <span id="atlasLogo" class="text-xl font-bold tracking-tighter text-primary font-headline cursor-default select-none">ATLAS AI</span>
+      <nav class="hidden md:flex gap-6">
+        <span class="text-primary border-b-2 border-primary-container pb-1 font-headline tracking-tight text-sm cursor-default">Chat</span>
+        <a href="/simulator" class="text-slate-400 font-medium hover:text-primary transition-colors font-headline tracking-tight text-sm">Simulator</a>
+        <a href="/graph-view" class="text-slate-400 font-medium hover:text-primary transition-colors font-headline tracking-tight text-sm">Graph</a>
+      </nav>
+    </div>
 
-<div class="header">
-Atlas AI – Engineering Knowledge Assistant
-</div>
+    <!-- Right controls -->
+    <div class="flex items-center gap-3">
+      <!-- Upload trigger -->
+      <button onclick="document.getElementById('uploadPanel').classList.toggle('hidden')"
+        class="flex items-center gap-2 px-3 py-1.5 bg-surface-container border border-outline-variant/20 rounded-sm text-xs font-label uppercase tracking-widest text-slate-400 hover:text-primary hover:border-primary/40 transition-all">
+        <span class="material-symbols-outlined text-sm">upload_file</span>
+        Upload Doc
+      </button>
+      <a href="/simulator"
+        class="flex items-center gap-2 px-3 py-1.5 bg-primary/10 border border-primary/30 rounded-sm text-xs font-label uppercase tracking-widest text-primary hover:bg-primary/20 transition-all">
+        <span class="material-symbols-outlined text-sm">hub</span>
+        Simulator
+      </a>
+      <!-- Hidden flush button — triple-click the ATLAS logo to reveal -->
+      <button id="flushBtn" onclick="openFlushModal()"
+        class="hidden flex items-center gap-1.5 px-2 py-1.5 border border-error/30 rounded-sm text-[10px] font-label uppercase tracking-widest text-error/60 hover:text-error hover:border-error/60 transition-all">
+        <span class="material-symbols-outlined text-sm">delete_forever</span>
+        Flush
+      </button>
+    </div>
+  </div>
 
-<div class="upload">
+  <!-- Flush confirmation modal -->
+  <div id="flushModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-surface-container border border-error/30 rounded-sm p-6 w-full max-w-sm shadow-2xl">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="material-symbols-outlined text-error text-2xl">warning</span>
+        <h2 class="text-sm font-bold text-on-surface uppercase tracking-widest">Flush All Data</h2>
+      </div>
+      <p class="text-xs text-slate-400 leading-relaxed mb-6">
+        This will permanently delete all vector embeddings and knowledge graph relationships.
+        The chat history on screen is not affected, but future queries will find nothing until you re-index documents.
+      </p>
+      <div class="flex gap-3 justify-end">
+        <button onclick="closeFlushModal()"
+          class="px-4 py-2 text-xs font-label uppercase tracking-widest text-slate-400 hover:text-on-surface border border-outline-variant/20 rounded-sm transition-colors">
+          Cancel
+        </button>
+        <button onclick="confirmFlush()"
+          class="px-4 py-2 text-xs font-label uppercase tracking-widest text-on-primary-container bg-error hover:bg-error/80 rounded-sm transition-colors font-bold">
+          Flush Everything
+        </button>
+      </div>
+    </div>
+  </div>
 
-<input type="file" id="fileInput">
+  <!-- Upload panel (collapsible) -->
+  <div id="uploadPanel" class="hidden border-t border-outline-variant/10 px-6 py-3 bg-surface-container-lowest/50">
+    <div class="flex items-center gap-4 max-w-2xl">
+      <label for="fileInput"
+        class="flex items-center gap-2 px-4 py-2 bg-surface-container border border-outline-variant/20 rounded-sm text-xs font-label uppercase tracking-widest text-slate-400 hover:text-primary hover:border-primary/40 cursor-pointer transition-all">
+        <span class="material-symbols-outlined text-sm">attach_file</span>
+        <span id="fileLabel">Choose PDF</span>
+      </label>
+      <input type="file" id="fileInput" accept=".pdf" class="hidden" onchange="updateFileLabel()"/>
+      <button onclick="uploadFile()"
+        class="px-4 py-2 bg-gradient-to-r from-primary to-primary-container text-on-primary-container font-bold text-xs uppercase tracking-widest rounded-sm active:scale-[0.98] transition-transform">
+        Index Document
+      </button>
+      <div id="uploadStatus" class="text-xs text-slate-500 font-mono"></div>
+    </div>
+    <!-- Upload progress bar -->
+    <div id="uploadProgressWrap" class="hidden mt-2 h-0.5 bg-surface-container-highest rounded-full overflow-hidden max-w-2xl">
+      <div id="uploadProgressBar" class="h-full bg-primary"></div>
+    </div>
+  </div>
+</header>
 
-<button onclick="uploadFile()">Upload</button>
+<!-- ══════════════════════════════════════════════════════════ MAIN LAYOUT -->
+<div class="flex flex-1 overflow-hidden">
 
-<span id="uploadStatus"></span>
+  <!-- ──────────────────────────────────────────────────── CHAT COLUMN -->
+  <main class="flex-1 flex flex-col overflow-hidden grid-bg">
 
-<a href="/graph-view">Knowledge Graph</a>
+    <!-- Messages area -->
+    <div id="chat" class="flex-1 overflow-y-auto px-4 py-8 space-y-6">
 
-</div>
+      <!-- Empty state -->
+      <div id="emptyState" class="flex flex-col items-center justify-center h-full text-center space-y-8 py-16">
+        <div class="w-16 h-16 rounded-full bg-surface-container-highest flex items-center justify-center border border-primary/20"
+             style="box-shadow: 0 0 20px rgba(173,198,255,0.15)">
+          <span class="material-symbols-outlined text-3xl text-primary fill-icon">hub</span>
+        </div>
+        <div class="max-w-md">
+          <h2 class="font-headline text-2xl font-bold tracking-tight text-on-background mb-3">Awaiting Signal...</h2>
+          <p class="text-on-surface-variant text-sm leading-relaxed">Upload a document and query the knowledge base. The RAG pipeline retrieves, reasons, and responds.</p>
+        </div>
+        <!-- Prompt suggestions -->
+        <div class="grid grid-cols-2 gap-3 w-full max-w-xl">
+          <button onclick="usePrompt('Summarize the main topics covered in the documents')"
+            class="p-3 bg-surface-container border border-outline-variant/20 rounded-sm hover:border-primary/40 text-left transition-all group">
+            <span class="text-[9px] font-label uppercase tracking-tighter text-slate-500 mb-1.5 block">Summarize</span>
+            <p class="text-xs text-on-surface group-hover:text-primary transition-colors leading-snug">Summarize the main topics covered</p>
+          </button>
+          <button onclick="usePrompt('What are the key technical concepts explained?')"
+            class="p-3 bg-surface-container border border-outline-variant/20 rounded-sm hover:border-primary/40 text-left transition-all group">
+            <span class="text-[9px] font-label uppercase tracking-tighter text-slate-500 mb-1.5 block">Concepts</span>
+            <p class="text-xs text-on-surface group-hover:text-primary transition-colors leading-snug">What are the key technical concepts?</p>
+          </button>
+          <button onclick="usePrompt('List all entities and relationships found')"
+            class="p-3 bg-surface-container border border-outline-variant/20 rounded-sm hover:border-primary/40 text-left transition-all group">
+            <span class="text-[9px] font-label uppercase tracking-tighter text-slate-500 mb-1.5 block">Entities</span>
+            <p class="text-xs text-on-surface group-hover:text-primary transition-colors leading-snug">List entities and relationships found</p>
+          </button>
+          <button onclick="usePrompt('What conclusions or recommendations are made?')"
+            class="p-3 bg-surface-container border border-outline-variant/20 rounded-sm hover:border-primary/40 text-left transition-all group">
+            <span class="text-[9px] font-label uppercase tracking-tighter text-slate-500 mb-1.5 block">Insights</span>
+            <p class="text-xs text-on-surface group-hover:text-primary transition-colors leading-snug">What conclusions are made?</p>
+          </button>
+        </div>
+      </div>
 
-<div class="chat-container">
+    </div>
 
-<div id="chat" class="chat"></div>
+    <!-- Input area -->
+    <div class="shrink-0 border-t border-outline-variant/10 bg-surface-container-lowest/60 backdrop-blur-md px-4 py-4">
+      <div class="max-w-3xl mx-auto">
+        <div class="flex items-center gap-3 bg-surface-container rounded-sm border border-outline-variant/20 focus-within:border-primary/50 transition-all px-2 py-1.5 shadow-xl">
+          <!-- Model picker -->
+          <div class="relative shrink-0">
+            <button id="modelPickerBtn" onclick="toggleModelPicker()"
+              class="flex items-center gap-1.5 px-2 border-r border-outline-variant/20 hover:bg-surface-variant/40 transition-colors rounded-l-sm py-1 h-full">
+              <span class="material-symbols-outlined text-secondary text-sm fill-icon">psychology</span>
+              <span id="modelLabel" class="text-[9px] font-label font-bold text-secondary uppercase tracking-widest max-w-[80px] truncate">mistral</span>
+              <span class="material-symbols-outlined text-slate-500 text-xs">expand_more</span>
+            </button>
+            <!-- Dropdown -->
+            <div id="modelDropdown" class="hidden absolute bottom-full left-0 mb-2 w-56 bg-surface-container border border-outline-variant/30 rounded-sm shadow-2xl z-50 py-1 overflow-hidden">
+              <div class="px-3 py-2 border-b border-outline-variant/10 flex items-center justify-between">
+                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Select Model</span>
+                <span id="modelLoadingDot" class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+              </div>
+              <div id="modelList" class="max-h-52 overflow-y-auto py-1">
+                <div class="px-3 py-2 text-[10px] text-slate-600 italic">Loading models...</div>
+              </div>
+            </div>
+          </div>
+          <!-- Input -->
+          <input
+            id="questionBox"
+            type="text"
+            placeholder="Ask something about your documents..."
+            onkeydown="if(event.key==='Enter')askQuestion()"
+            class="flex-1 bg-transparent border-none focus:ring-0 text-on-surface text-sm placeholder:text-slate-600 font-body py-1.5"
+          />
+          <!-- Send -->
+          <button onclick="askQuestion()"
+            class="send-glow flex items-center gap-1.5 bg-primary text-on-primary-container px-4 py-2 rounded-sm font-label font-bold text-xs uppercase tracking-widest hover:bg-primary-fixed-dim transition-colors active:scale-95 shrink-0">
+            <span class="material-symbols-outlined text-sm">bolt</span>
+            Send
+          </button>
+        </div>
+        <!-- Footer hints -->
+        <div class="flex justify-between items-center mt-2 px-1">
+          <div class="flex items-center gap-4">
+            <div class="flex items-center gap-1.5">
+              <span id="statusDot" class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+              <span id="statusLabel" class="text-[9px] font-label uppercase tracking-widest text-slate-500">System Ready</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <a href="/simulator" class="text-[9px] font-label uppercase tracking-widest text-slate-600 hover:text-primary transition-colors flex items-center gap-1">
+              <span class="material-symbols-outlined text-xs">hub</span>Watch pipeline →
+            </a>
+            <span class="text-[9px] font-label text-slate-700">Press Enter to send</span>
+          </div>
+        </div>
+      </div>
+    </div>
 
-</div>
+  </main>
 
-<div class="input-container">
+  <!-- ─────────────────────────────────────────────────── RIGHT SIDEBAR -->
+  <aside class="hidden xl:flex w-72 bg-surface-container-low border-l border-outline-variant/10 flex-col shrink-0">
+    <div class="p-5 border-b border-outline-variant/10">
+      <h3 class="text-[10px] font-bold text-primary uppercase tracking-widest">Session Context</h3>
+    </div>
+    <div class="p-5 space-y-5 overflow-y-auto flex-1">
+      <!-- Stats -->
+      <div class="space-y-2">
+        <div class="flex justify-between items-center">
+          <span class="text-[9px] text-slate-500 uppercase tracking-widest">Messages</span>
+          <span id="msgCount" class="text-[10px] font-mono text-primary">0</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-[9px] text-slate-500 uppercase tracking-widest">Documents</span>
+          <span id="docCount" class="text-[10px] font-mono text-primary">—</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-[9px] text-slate-500 uppercase tracking-widest">Last Query</span>
+          <span id="lastQuery" class="text-[10px] font-mono text-slate-500 truncate max-w-[120px]">—</span>
+        </div>
+      </div>
 
-<div class="input-wrapper">
+      <!-- Last sources -->
+      <div>
+        <h4 class="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-3">Last Sources</h4>
+        <div id="sidebarSources" class="space-y-2">
+          <p class="text-[10px] text-slate-600 italic">No sources yet</p>
+        </div>
+      </div>
 
-<input
-id="questionBox"
-placeholder="Ask something about your documents..."
-onkeypress="if(event.key==='Enter'){askQuestion()}"
->
-
-<button onclick="askQuestion()">Send</button>
-
-</div>
+      <!-- Quick links -->
+      <div class="mt-auto pt-4 border-t border-outline-variant/10 space-y-1">
+        <a href="/simulator" class="flex items-center gap-2 px-3 py-2 text-slate-500 hover:text-primary hover:bg-surface-variant transition-colors rounded-sm text-xs">
+          <span class="material-symbols-outlined text-sm">hub</span>RAG Simulator
+        </a>
+        <a href="/graph-view" class="flex items-center gap-2 px-3 py-2 text-slate-500 hover:text-primary hover:bg-surface-variant transition-colors rounded-sm text-xs">
+          <span class="material-symbols-outlined text-sm">account_tree</span>Knowledge Graph
+        </a>
+      </div>
+    </div>
+  </aside>
 
 </div>
 
 <script>
+// ── Hidden flush trigger (triple-click ATLAS logo)
+let _logoClicks = 0, _logoTimer = null;
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("atlasLogo")?.addEventListener("click", () => {
+    _logoClicks++;
+    clearTimeout(_logoTimer);
+    _logoTimer = setTimeout(() => { _logoClicks = 0; }, 600);
+    if (_logoClicks >= 3) {
+      _logoClicks = 0;
+      document.getElementById("flushBtn").classList.toggle("hidden");
+    }
+  });
+});
 
-function addMessage(text,type,sources){
+// ── Flush modal
+function openFlushModal()  { document.getElementById("flushModal").classList.remove("hidden"); }
+function closeFlushModal() { document.getElementById("flushModal").classList.add("hidden"); }
 
-    let chat = document.getElementById("chat")
+async function confirmFlush() {
+  closeFlushModal();
+  try {
+    const res = await fetch("/admin/flush", { method: "DELETE" });
+    const data = await res.json();
+    if (res.ok) {
+      addMessage(`Knowledge base cleared. Removed ${data.vectors_removed} vector chunk(s) and all graph relationships.`, "system");
+    } else {
+      addMessage("Flush failed: " + (data.detail || "unknown error"), "system");
+    }
+  } catch (e) {
+    addMessage("Flush request failed: " + e.message, "system");
+  }
+}
 
-    let msg = document.createElement("div")
+// ── State
+let msgCount = 0;
+let isThinking = false;
+let selectedModel = "mistral";
+let modelsLoaded = false;
 
-    msg.className = "message " + type
+// ── Model picker
+function toggleModelPicker() {
+  const dropdown = document.getElementById("modelDropdown");
+  const isHidden = dropdown.classList.contains("hidden");
+  if (isHidden) {
+    dropdown.classList.remove("hidden");
+    if (!modelsLoaded) loadModels();
+  } else {
+    dropdown.classList.add("hidden");
+  }
+}
 
-    let bubble = document.createElement("div")
+async function loadModels() {
+  const list = document.getElementById("modelList");
+  try {
+    const res  = await fetch("/models");
+    const data = await res.json();
+    modelsLoaded = true;
+    document.getElementById("modelLoadingDot").classList.remove("animate-pulse");
+    document.getElementById("modelLoadingDot").classList.add("bg-tertiary");
 
-    bubble.className = "bubble"
-
-    bubble.innerText = text
-
-    if(sources){
-
-        let src = document.createElement("div")
-
-        src.className="sources"
-
-        let html="<b>Sources</b><br>"
-
-        for(let s of sources){
-
-            html += s.document + "<br>"
-
-        }
-
-        src.innerHTML=html
-
-        bubble.appendChild(src)
+    if (!data.models || data.models.length === 0) {
+      list.innerHTML = `<div class="px-3 py-2 text-[10px] text-slate-600 italic">No models found</div>`;
+      return;
     }
 
-    msg.appendChild(bubble)
-
-    chat.appendChild(msg)
-
-    chat.scrollTop = chat.scrollHeight
+    list.innerHTML = data.models.map(m => `
+      <button onclick="selectModel('${m}')"
+        class="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-surface-variant/50 transition-colors group"
+        id="model-opt-${CSS.escape(m)}">
+        <span class="material-symbols-outlined text-sm ${m === selectedModel ? 'text-secondary fill-icon' : 'text-slate-500 group-hover:text-primary'}">psychology</span>
+        <div class="flex-1 min-w-0">
+          <div class="text-[10px] font-mono text-on-surface truncate">${escHtml(m)}</div>
+        </div>
+        ${m === selectedModel ? '<span class="material-symbols-outlined text-tertiary text-sm fill-icon">check_circle</span>' : ''}
+      </button>
+    `).join("");
+  } catch (e) {
+    list.innerHTML = `<div class="px-3 py-2 text-[10px] text-error italic">Failed to load models</div>`;
+  }
 }
 
+function selectModel(name) {
+  selectedModel = name;
+  document.getElementById("modelLabel").textContent = name.split(":")[0]; // strip tag suffix for display
+  document.getElementById("modelDropdown").classList.add("hidden");
+  // Refresh list to update checkmarks
+  modelsLoaded = false;
+}
 
+// Close dropdown when clicking outside
+document.addEventListener("click", e => {
+  if (!e.target.closest("#modelPickerBtn") && !e.target.closest("#modelDropdown")) {
+    document.getElementById("modelDropdown").classList.add("hidden");
+  }
+});
 
-async function uploadFile(){
+// ── Helpers
+function setStatus(text, color) {
+  document.getElementById("statusLabel").textContent = text;
+  const dot = document.getElementById("statusDot");
+  dot.className = `w-1.5 h-1.5 rounded-full ${color}`;
+}
 
-    let file=document.getElementById("fileInput").files[0]
+function updateFileLabel() {
+  const f = document.getElementById("fileInput").files[0];
+  document.getElementById("fileLabel").textContent = f ? f.name : "Choose PDF";
+}
 
-    if(!file){
-        alert("Select a file")
-        return
+function usePrompt(text) {
+  document.getElementById("questionBox").value = text;
+  document.getElementById("questionBox").focus();
+}
+
+function hideEmpty() {
+  const e = document.getElementById("emptyState");
+  if (e) e.style.display = "none";
+}
+
+// ── Add message
+function addMessage(text, type, sources, isThinkingMsg, modelUsed) {
+  hideEmpty();
+
+  const chat = document.getElementById("chat");
+  const wrap  = document.createElement("div");
+  wrap.className = "flex msg-enter " + (type === "user" ? "justify-end" : "justify-start");
+
+  if (isThinkingMsg) wrap.id = "thinkingMsg";
+
+  const maxW = type === "user" ? "max-w-[65%]" : "max-w-[80%]";
+
+  if (type === "user") {
+    wrap.innerHTML = `
+      <div class="${maxW} px-4 py-3 bg-primary/15 border border-primary/25 rounded-sm rounded-tr-lg text-sm text-on-surface leading-relaxed font-body">
+        ${escHtml(text)}
+      </div>`;
+  } else if (isThinkingMsg) {
+    wrap.innerHTML = `
+      <div class="flex items-start gap-3 ${maxW}">
+        <div class="w-7 h-7 rounded-sm bg-surface-container-highest border border-primary/20 flex items-center justify-center shrink-0 mt-0.5">
+          <span class="material-symbols-outlined text-primary text-sm fill-icon">psychology</span>
+        </div>
+        <div class="px-4 py-3 bg-surface-container border border-outline-variant/15 rounded-sm rounded-tl-lg text-sm text-slate-500 italic flex items-center gap-2">
+          <span class="w-1.5 h-1.5 rounded-full bg-secondary animate-bounce" style="animation-delay:0ms"></span>
+          <span class="w-1.5 h-1.5 rounded-full bg-secondary animate-bounce" style="animation-delay:150ms"></span>
+          <span class="w-1.5 h-1.5 rounded-full bg-secondary animate-bounce" style="animation-delay:300ms"></span>
+        </div>
+      </div>`;
+  } else if (type === "system") {
+    wrap.className = "flex justify-center msg-enter";
+    wrap.innerHTML = `
+      <div class="flex items-center gap-2 px-4 py-2 bg-error/10 border border-error/20 rounded-sm text-[11px] text-error/80 font-mono">
+        <span class="material-symbols-outlined text-sm">info</span>
+        ${escHtml(text)}
+      </div>`;
+  } else {
+    // AI response
+    let sourcesHTML = "";
+    if (sources && sources.length) {
+      sourcesHTML = `
+        <div class="mt-4 pt-3 border-t border-outline-variant/10">
+          <span class="text-[9px] font-label uppercase tracking-widest text-slate-500 block mb-2">Sources</span>
+          <div class="flex flex-wrap gap-1.5">
+            ${sources.map(s => `
+              <div class="flex items-center gap-1.5 px-2.5 py-1 bg-surface-container-lowest border border-outline-variant/20 rounded text-[9px] font-mono text-on-surface-variant hover:border-primary/40 transition-colors cursor-default">
+                <span class="material-symbols-outlined text-xs text-primary/60">description</span>
+                ${escHtml(s.document)}
+              </div>`).join("")}
+          </div>
+        </div>`;
     }
 
-    let formData=new FormData()
+    const modelTag = modelUsed
+      ? `<span class="inline-flex items-center gap-1 text-[9px] font-mono text-slate-600 mb-2 block">
+           <span class="material-symbols-outlined text-xs fill-icon text-secondary/60">psychology</span>
+           ${escHtml(modelUsed.split(":")[0])}
+         </span>`
+      : "";
 
-    formData.append("file",file)
+    wrap.innerHTML = `
+      <div class="flex items-start gap-3 ${maxW}">
+        <div class="w-7 h-7 rounded-sm bg-surface-container-highest border border-primary/20 flex items-center justify-center shrink-0 mt-0.5">
+          <span class="material-symbols-outlined text-primary text-sm fill-icon">psychology</span>
+        </div>
+        <div class="flex-1 px-4 py-3 bg-surface-container border border-outline-variant/15 rounded-sm rounded-tl-lg text-sm text-on-surface leading-relaxed font-body">
+          ${modelTag}${escHtml(text)}
+          ${sourcesHTML}
+        </div>
+      </div>`;
+  }
 
-    document.getElementById("uploadStatus").innerText="Indexing..."
-
-    let response=await fetch("/documents/upload",{
-        method:"POST",
-        body:formData
-    })
-
-    await response.json()
-
-    document.getElementById("uploadStatus").innerText="Indexed: "+file.name
+  chat.appendChild(wrap);
+  chat.scrollTop = chat.scrollHeight;
+  msgCount++;
+  document.getElementById("msgCount").textContent = msgCount;
 }
 
-
-
-async function askQuestion(){
-
-    let input=document.getElementById("questionBox")
-
-    let question=input.value.trim()
-
-    if(!question) return
-
-    addMessage(question,"user")
-
-    input.value=""
-
-    addMessage("Thinking...","ai")
-
-    let response=await fetch("/query",{
-
-        method:"POST",
-
-        headers:{
-            "Content-Type":"application/json"
-        },
-
-        body:JSON.stringify({
-            question:question
-        })
-
-    })
-
-    let result=await response.json()
-
-    let chat=document.getElementById("chat")
-
-    chat.removeChild(chat.lastChild)
-
-    addMessage(result.answer,"ai",result.sources)
+function escHtml(str) {
+  return String(str || "")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
+// ── Upload
+async function uploadFile() {
+  const file = document.getElementById("fileInput").files[0];
+  if (!file) { alert("Choose a file first"); return; }
+
+  const statusEl  = document.getElementById("uploadStatus");
+  const progressW = document.getElementById("uploadProgressWrap");
+  const progressB = document.getElementById("uploadProgressBar");
+
+  // Reset bar
+  progressW.classList.remove("hidden");
+  progressB.style.width = "0%";
+  progressB.style.backgroundColor = "#adc6ff";
+  statusEl.textContent = "Uploading...";
+  statusEl.className   = "text-xs font-mono text-secondary";
+  setStatus("Indexing document...", "bg-secondary animate-pulse");
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  let taskId;
+  try {
+    const res  = await fetch("/documents/upload", { method: "POST", body: formData });
+    const data = await res.json();
+    taskId = data.task_id;
+  } catch (e) {
+    statusEl.textContent = "Upload failed";
+    statusEl.className   = "text-xs font-mono text-error";
+    progressB.style.backgroundColor = "#ffb4ab";
+    setStatus("Upload error", "bg-error");
+    return;
+  }
+
+  // Open SSE stream and drive the bar from real events
+  const es = new EventSource(`/documents/progress/${taskId}`);
+
+  es.onmessage = (evt) => {
+    let event;
+    try { event = JSON.parse(evt.data); } catch { return; }
+
+    const pct    = Math.min(100, event.pct ?? 0);
+    const stage  = event.stage  || "";
+    const detail = event.detail || "";
+
+    // Update bar width
+    progressB.style.width = pct + "%";
+
+    // Color: error=red, done=green, else blue
+    if (stage === "error") {
+      progressB.style.backgroundColor = "#ffb4ab";
+    } else if (stage === "done" || pct === 100) {
+      progressB.style.backgroundColor = "#4edea3";
+    } else {
+      progressB.style.backgroundColor = "#adc6ff";
+    }
+
+    // Status label — show chunk progress inside extract_relations
+    if (stage === "extract_relations" && event.total_chunks > 0) {
+      statusEl.textContent = `Extracting relationships… ${event.chunk_idx}/${event.total_chunks}`;
+    } else {
+      statusEl.textContent = detail || stage.replace(/_/g, " ");
+    }
+    statusEl.className = stage === "error"
+      ? "text-xs font-mono text-error"
+      : "text-xs font-mono text-secondary";
+
+    if (stage === "done" || pct === 100) {
+      es.close();
+      statusEl.textContent = "Indexed: " + file.name;
+      statusEl.className   = "text-xs font-mono text-tertiary";
+      document.getElementById("docCount").textContent =
+        (parseInt(document.getElementById("docCount").textContent) || 0) + 1;
+      setStatus("System Ready", "bg-tertiary");
+      setTimeout(() => { progressW.classList.add("hidden"); }, 3000);
+    }
+
+    if (stage === "error") {
+      es.close();
+      setStatus("Indexing error", "bg-error");
+    }
+  };
+
+  es.onerror = () => {
+    es.close();
+    statusEl.textContent = "Connection lost";
+    statusEl.className   = "text-xs font-mono text-error";
+    progressB.style.backgroundColor = "#ffb4ab";
+    setStatus("Upload error", "bg-error");
+  };
+}
+
+// ── Ask
+async function askQuestion() {
+  if (isThinking) return;
+  const input    = document.getElementById("questionBox");
+  const question = input.value.trim();
+  if (!question) return;
+
+  addMessage(question, "user");
+  input.value = "";
+  document.getElementById("lastQuery").textContent = question.slice(0, 20) + (question.length > 20 ? "…" : "");
+
+  isThinking = true;
+  setStatus("Thinking...", "bg-secondary animate-pulse");
+  addMessage("", "ai", null, true);
+
+  try {
+    const res = await fetch("/query", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ question, model: selectedModel }),
+    });
+    const result = await res.json();
+
+    // Remove thinking bubble
+    const thinking = document.getElementById("thinkingMsg");
+    if (thinking) thinking.remove();
+
+    addMessage(result.answer, "ai", result.sources, false, result.model || selectedModel);
+
+    // Update sidebar sources
+    if (result.sources && result.sources.length) {
+      document.getElementById("sidebarSources").innerHTML = result.sources.map(s => `
+        <div class="p-2 bg-surface-container rounded-sm border border-outline-variant/10">
+          <div class="text-[9px] font-mono text-secondary truncate">${escHtml(s.document)}</div>
+          <p class="text-[9px] text-slate-500 mt-0.5 line-clamp-2 leading-snug">${escHtml(s.text)}</p>
+        </div>`).join("");
+    }
+  } catch (e) {
+    const thinking = document.getElementById("thinkingMsg");
+    if (thinking) thinking.remove();
+    addMessage("Error: Could not reach the server.", "ai");
+  } finally {
+    isThinking = false;
+    setStatus("System Ready", "bg-tertiary");
+  }
+}
 </script>
-
 </body>
-
 </html>
