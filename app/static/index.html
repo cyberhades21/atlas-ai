@@ -91,12 +91,8 @@ tailwind.config = {
     box-shadow: 0 0 14px rgba(173,198,255,0.3);
   }
 
-  /* Upload progress bar */
-  @keyframes progress {
-    from { width: 0% }
-    to   { width: 100% }
-  }
-  .uploading-bar { animation: progress 2s ease forwards; }
+  /* Upload progress bar — driven by real SSE events, no fake animation */
+  #uploadProgressBar { transition: width 0.4s ease, background-color 0.3s; }
 
   /* Model picker dropdown */
   #modelDropdown {
@@ -479,35 +475,90 @@ async function uploadFile() {
   const file = document.getElementById("fileInput").files[0];
   if (!file) { alert("Choose a file first"); return; }
 
-  const statusEl   = document.getElementById("uploadStatus");
-  const progressW  = document.getElementById("uploadProgressWrap");
-  const progressB  = document.getElementById("uploadProgressBar");
+  const statusEl  = document.getElementById("uploadStatus");
+  const progressW = document.getElementById("uploadProgressWrap");
+  const progressB = document.getElementById("uploadProgressBar");
 
-  statusEl.textContent = "Indexing...";
-  statusEl.className   = "text-xs font-mono text-secondary";
+  // Reset bar
   progressW.classList.remove("hidden");
-  progressB.className  = "h-full bg-primary uploading-bar";
+  progressB.style.width = "0%";
+  progressB.style.backgroundColor = "#adc6ff";
+  statusEl.textContent = "Uploading...";
+  statusEl.className   = "text-xs font-mono text-secondary";
   setStatus("Indexing document...", "bg-secondary animate-pulse");
 
   const formData = new FormData();
   formData.append("file", file);
 
+  let taskId;
   try {
-    const res = await fetch("/documents/upload", { method: "POST", body: formData });
-    await res.json();
-    statusEl.textContent = "Indexed: " + file.name;
-    statusEl.className   = "text-xs font-mono text-tertiary";
-    progressB.className  = "h-full bg-tertiary w-full";
-    document.getElementById("docCount").textContent = (parseInt(document.getElementById("docCount").textContent) || 0) + 1;
-    setStatus("System Ready", "bg-tertiary");
-    setTimeout(() => {
-      progressW.classList.add("hidden");
-    }, 2000);
+    const res  = await fetch("/documents/upload", { method: "POST", body: formData });
+    const data = await res.json();
+    taskId = data.task_id;
   } catch (e) {
     statusEl.textContent = "Upload failed";
     statusEl.className   = "text-xs font-mono text-error";
+    progressB.style.backgroundColor = "#ffb4ab";
     setStatus("Upload error", "bg-error");
+    return;
   }
+
+  // Open SSE stream and drive the bar from real events
+  const es = new EventSource(`/documents/progress/${taskId}`);
+
+  es.onmessage = (evt) => {
+    let event;
+    try { event = JSON.parse(evt.data); } catch { return; }
+
+    const pct    = Math.min(100, event.pct ?? 0);
+    const stage  = event.stage  || "";
+    const detail = event.detail || "";
+
+    // Update bar width
+    progressB.style.width = pct + "%";
+
+    // Color: error=red, done=green, else blue
+    if (stage === "error") {
+      progressB.style.backgroundColor = "#ffb4ab";
+    } else if (stage === "done" || pct === 100) {
+      progressB.style.backgroundColor = "#4edea3";
+    } else {
+      progressB.style.backgroundColor = "#adc6ff";
+    }
+
+    // Status label — show chunk progress inside extract_relations
+    if (stage === "extract_relations" && event.total_chunks > 0) {
+      statusEl.textContent = `Extracting relationships… ${event.chunk_idx}/${event.total_chunks}`;
+    } else {
+      statusEl.textContent = detail || stage.replace(/_/g, " ");
+    }
+    statusEl.className = stage === "error"
+      ? "text-xs font-mono text-error"
+      : "text-xs font-mono text-secondary";
+
+    if (stage === "done" || pct === 100) {
+      es.close();
+      statusEl.textContent = "Indexed: " + file.name;
+      statusEl.className   = "text-xs font-mono text-tertiary";
+      document.getElementById("docCount").textContent =
+        (parseInt(document.getElementById("docCount").textContent) || 0) + 1;
+      setStatus("System Ready", "bg-tertiary");
+      setTimeout(() => { progressW.classList.add("hidden"); }, 3000);
+    }
+
+    if (stage === "error") {
+      es.close();
+      setStatus("Indexing error", "bg-error");
+    }
+  };
+
+  es.onerror = () => {
+    es.close();
+    statusEl.textContent = "Connection lost";
+    statusEl.className   = "text-xs font-mono text-error";
+    progressB.style.backgroundColor = "#ffb4ab";
+    setStatus("Upload error", "bg-error");
+  };
 }
 
 // ── Ask

@@ -167,6 +167,14 @@ tailwind.config = {
           <span class="text-[9px] text-slate-500 uppercase tracking-widest">Documents</span>
           <span id="docCount" class="text-[10px] font-mono text-tertiary">—</span>
         </div>
+        <!-- Live indicator -->
+        <div class="flex justify-between items-center pt-1 border-t border-outline-variant/10 mt-1">
+          <span class="text-[9px] text-slate-500 uppercase tracking-widest">Live Updates</span>
+          <div class="flex items-center gap-1.5">
+            <span id="liveIndicatorDot" class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+            <span id="liveIndicatorText" class="text-[9px] font-mono text-tertiary">Live</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -300,24 +308,101 @@ fetch("/graph")
 
     if (nodes.length === 0) {
       document.getElementById("emptyOverlay").classList.remove("hidden");
-      return;
+    } else {
+      allElements = [...nodes, ...edges];
+      initCy(allElements);
     }
 
-    // Stats
-    document.getElementById("nodeCount").textContent = nodes.length;
-    document.getElementById("edgeCount").textContent = edges.length;
-
-    // Unique documents
-    const docs = new Set(edges.map(e => e.data?.document).filter(Boolean));
-    document.getElementById("docCount").textContent = docs.size || "—";
-
-    allElements = [...nodes, ...edges];
-    initCy(allElements);
+    // Stats (show even if empty, SSE may fill it)
+    updateStats();
   })
   .catch(() => {
     document.getElementById("loadingOverlay").classList.add("hidden");
     document.getElementById("emptyOverlay").classList.remove("hidden");
   });
+
+// ── Live graph updates via SSE
+const graphUpdateES = new EventSource("/graph/updates");
+
+graphUpdateES.onmessage = (evt) => {
+  let payload;
+  try { payload = JSON.parse(evt.data); } catch { return; }
+
+  const newNodes = payload.nodes || [];
+  const newEdges = payload.edges || [];
+  if (!newNodes.length && !newEdges.length) return;
+
+  // Hide empty overlay if it was showing
+  document.getElementById("emptyOverlay").classList.add("hidden");
+
+  if (!cy) {
+    // Graph wasn't initialised yet (was empty) — boot it now
+    allElements = [...newNodes, ...newEdges];
+    initCy(allElements);
+    updateStats();
+    flashLiveIndicator();
+    return;
+  }
+
+  // Merge: only add elements that don't already exist
+  let addedCount = 0;
+  newNodes.forEach(n => {
+    if (!cy.getElementById(n.data.id).length) {
+      cy.add(n);
+      addedCount++;
+    }
+  });
+  newEdges.forEach(e => {
+    // Avoid duplicate edges (same source+target+label)
+    const exists = cy.edges().some(ex =>
+      ex.data("source") === e.data.source &&
+      ex.data("target") === e.data.target &&
+      ex.data("label")  === e.data.label
+    );
+    if (!exists) {
+      cy.add(e);
+      addedCount++;
+    }
+  });
+
+  if (addedCount > 0) {
+    // Re-run layout only on the new elements so existing positions are preserved
+    cy.layout({ name: "cose", animate: true, animationDuration: 600,
+                fit: false, randomize: false }).run();
+    updateStats();
+    flashLiveIndicator();
+  }
+};
+
+graphUpdateES.onerror = () => {
+  // SSE dropped — set indicator to offline but don't crash
+  const dot  = document.getElementById("liveIndicatorDot");
+  const text = document.getElementById("liveIndicatorText");
+  if (dot)  dot.className  = "w-1.5 h-1.5 rounded-full bg-error";
+  if (text) text.textContent = "Offline";
+};
+
+function updateStats() {
+  if (!cy) {
+    document.getElementById("nodeCount").textContent = "0";
+    document.getElementById("edgeCount").textContent = "0";
+    return;
+  }
+  document.getElementById("nodeCount").textContent = cy.nodes().length;
+  document.getElementById("edgeCount").textContent = cy.edges().length;
+}
+
+function flashLiveIndicator() {
+  const dot  = document.getElementById("liveIndicatorDot");
+  const text = document.getElementById("liveIndicatorText");
+  if (!dot) return;
+  dot.className  = "w-1.5 h-1.5 rounded-full bg-tertiary animate-ping";
+  text.textContent = "Updating…";
+  setTimeout(() => {
+    dot.className  = "w-1.5 h-1.5 rounded-full bg-tertiary";
+    text.textContent = "Live";
+  }, 1200);
+}
 
 // ── Init cytoscape
 function initCy(elements) {
