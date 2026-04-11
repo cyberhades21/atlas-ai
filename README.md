@@ -122,6 +122,41 @@ Pan, zoom, and click any node to see relationships and connected documents.
 
 ---
 
+## 🧠 System Architecture
+
+ATLAS splits the RAG pipeline into **observable, instrumented stages** — combining vector retrieval, knowledge graph reasoning, and real-time event streaming.
+
+The diagram below shows:
+
+* Dual retrieval (vector + graph)
+* Context fusion pipeline
+* LLM generation flow
+* 🔥 Observability layer powering simulator, graph, and chat UIs
+
+![ATLAS Architecture](static/images/architecture.png)
+
+> End-to-end flow of ATLAS showing dual retrieval, pipeline instrumentation, and UI event streaming.
+
+---
+
+## ⚙️ Architecture Breakdown
+
+### 🔍 What makes this different
+
+Unlike traditional RAG systems, ATLAS exposes **every internal stage**:
+
+* Each pipeline step emits **SSE events**
+* Events are streamed to the UI in real time
+* The same events power:
+
+  * Simulator playback
+  * Graph updates
+  * Chat inspection
+
+This turns the system into a **debuggable AI pipeline**, not a black box.
+
+---
+
 ## Features
 
 | Feature                 | Detail                                                               |
@@ -223,12 +258,16 @@ ollama pull mistral
 ollama pull nomic-embed-text
 ```
 
+---
+
 ### 2. Clone repo
 
 ```bash
 git clone https://github.com/cyberhades21/atlas-ai.git
 cd atlas-ai
 ```
+
+---
 
 ### 3. Setup environment
 
@@ -237,11 +276,15 @@ python -m venv venv
 source venv/bin/activate  # Windows equivalent if needed
 ```
 
+---
+
 ### 4. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
+
+---
 
 ### 5. Run
 
@@ -284,7 +327,7 @@ Run → pause → inspect → replay.
 
 ### Switching models
 
-Use model picker in UI (filters non-chat models automatically).
+Use model picker in UI.
 
 ### Flush tool (Dev)
 
@@ -337,29 +380,6 @@ CLI:
 ```bash
 rm -rf data
 ```
-
----
-
-## API Reference
-
-Available at:
-
-```
-http://localhost:8000/docs
-```
-
-### Key Endpoints
-
-* `POST /documents/upload`
-* `GET /documents/progress/{task_id}` (SSE)
-* `POST /query`
-* `GET /graph`
-* `GET /graph/updates` (SSE)
-* `GET /models`
-* `GET /simulator/runs`
-* `POST /simulator/run`
-* `GET /simulator/stream/{run_id}` (SSE)
-* `DELETE /admin/flush`
 
 ---
 
