@@ -38,7 +38,15 @@ def _chat(model: str, messages: list) -> str:
     return response["message"]["content"]
 
 
-def generate_answer(context: str, question: str, temperature: float = 0.7) -> str:
+DEFAULT_MODEL = os.getenv("ATLAS_MODEL", "mistral")
+
+
+def generate_answer(
+    context: str,
+    question: str,
+    temperature: float = 0.7,
+    model: str = DEFAULT_MODEL,
+) -> str:
     """
     Generate an answer from the LLM.
 
@@ -50,18 +58,18 @@ def generate_answer(context: str, question: str, temperature: float = 0.7) -> st
         f"Context:\n{context}\n\nQuestion:\n{question}"
     )
     messages = [{"role": "user", "content": prompt}]
-    future = _executor.submit(_chat, "mistral", messages)
+    future = _executor.submit(_chat, model, messages)
     try:
         return future.result(timeout=LLM_TIMEOUT_SECONDS)
     except FuturesTimeout:
         future.cancel()
-        logger.error("generate_answer timed out after %s s", LLM_TIMEOUT_SECONDS)
+        logger.error("generate_answer timed out after %s s (model=%s)", LLM_TIMEOUT_SECONDS, model)
         raise TimeoutError(
             f"LLM did not respond within {LLM_TIMEOUT_SECONDS} seconds"
         )
 
 
-def call_llm_json(prompt: str) -> list:
+def call_llm_json(prompt: str, model: str = DEFAULT_MODEL) -> list:
     """
     Call the LLM and parse the response as JSON.
     Returns an empty list on parse failure or timeout.
@@ -73,12 +81,12 @@ def call_llm_json(prompt: str) -> list:
         },
         {"role": "user", "content": prompt},
     ]
-    future = _executor.submit(_chat, "mistral", messages)
+    future = _executor.submit(_chat, model, messages)
     try:
         content = future.result(timeout=LLM_TIMEOUT_SECONDS)
     except FuturesTimeout:
         future.cancel()
-        logger.warning("call_llm_json timed out after %s s", LLM_TIMEOUT_SECONDS)
+        logger.warning("call_llm_json timed out after %s s (model=%s)", LLM_TIMEOUT_SECONDS, model)
         return []
 
     try:

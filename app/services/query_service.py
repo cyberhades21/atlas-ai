@@ -26,7 +26,7 @@ import logging
 
 from app.ai.embeddings import embed_query
 from app.storage.vector_store import search
-from app.ai.llm import generate_answer
+from app.ai.llm import generate_answer, DEFAULT_MODEL
 from app.ai.entity_extractor import extract_entities
 from app.storage.graph_store import search_relationships
 
@@ -81,13 +81,17 @@ def run_prompt_builder(context: str, question: str) -> str:
 # Composed pipeline — used by the plain /query endpoint
 # ---------------------------------------------------------------------------
 
-def answer_query(question: str, top_k: int = DEFAULT_TOP_K) -> dict:
+def answer_query(
+    question: str,
+    top_k: int = DEFAULT_TOP_K,
+    model: str = DEFAULT_MODEL,
+) -> dict:
     entities = run_entity_extraction(question)
     graph_context, _ = run_graph_search(entities)
     embedding = run_embedding(question)
     chunks, metadata = run_vector_retrieval(embedding, n_results=top_k)
     context = run_context_builder(graph_context, chunks)
-    answer = generate_answer(context, question)
+    answer = generate_answer(context, question, model=model)
 
     sources = [
         {"document": meta["document"], "text": chunk[:300]}
@@ -99,4 +103,5 @@ def answer_query(question: str, top_k: int = DEFAULT_TOP_K) -> dict:
         "entities": entities,
         "graph_context": graph_context,
         "sources": sources,
+        "model": model,
     }

@@ -17,6 +17,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from app.ai.llm import DEFAULT_MODEL
 from app.pipeline.events import bus
 from app.pipeline.instrumented_query import run_instrumented_pipeline, advance_step
 
@@ -32,6 +33,7 @@ class RunRequest(BaseModel):
     step_mode: bool = False
     top_k: int = 5
     temperature: float = 0.7
+    model: str = DEFAULT_MODEL
 
 
 class NextStepRequest(BaseModel):
@@ -61,6 +63,7 @@ async def start_run(body: RunRequest):
             step_mode=body.step_mode,
             top_k=body.top_k,
             temperature=body.temperature,
+            model=body.model,
         )
 
     thread = threading.Thread(target=_worker, daemon=True)

@@ -97,6 +97,17 @@ tailwind.config = {
     to   { width: 100% }
   }
   .uploading-bar { animation: progress 2s ease forwards; }
+
+  /* Model picker dropdown */
+  #modelDropdown {
+    transform-origin: top left;
+    transition: opacity 0.15s, transform 0.15s;
+  }
+  #modelDropdown.hidden {
+    opacity: 0;
+    transform: scaleY(0.9);
+    pointer-events: none;
+  }
 </style>
 </head>
 <body class="bg-surface text-on-background font-body h-screen flex flex-col overflow-hidden">
@@ -202,10 +213,24 @@ tailwind.config = {
     <div class="shrink-0 border-t border-outline-variant/10 bg-surface-container-lowest/60 backdrop-blur-md px-4 py-4">
       <div class="max-w-3xl mx-auto">
         <div class="flex items-center gap-3 bg-surface-container rounded-sm border border-outline-variant/20 focus-within:border-primary/50 transition-all px-2 py-1.5 shadow-xl">
-          <!-- Model badge -->
-          <div class="flex items-center gap-1.5 px-2 border-r border-outline-variant/20 shrink-0">
-            <span class="material-symbols-outlined text-secondary text-sm fill-icon">psychology</span>
-            <span class="text-[9px] font-label font-bold text-secondary uppercase tracking-widest">mistral</span>
+          <!-- Model picker -->
+          <div class="relative shrink-0">
+            <button id="modelPickerBtn" onclick="toggleModelPicker()"
+              class="flex items-center gap-1.5 px-2 border-r border-outline-variant/20 hover:bg-surface-variant/40 transition-colors rounded-l-sm py-1 h-full">
+              <span class="material-symbols-outlined text-secondary text-sm fill-icon">psychology</span>
+              <span id="modelLabel" class="text-[9px] font-label font-bold text-secondary uppercase tracking-widest max-w-[80px] truncate">mistral</span>
+              <span class="material-symbols-outlined text-slate-500 text-xs">expand_more</span>
+            </button>
+            <!-- Dropdown -->
+            <div id="modelDropdown" class="hidden absolute bottom-full left-0 mb-2 w-56 bg-surface-container border border-outline-variant/30 rounded-sm shadow-2xl z-50 py-1 overflow-hidden">
+              <div class="px-3 py-2 border-b border-outline-variant/10 flex items-center justify-between">
+                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Select Model</span>
+                <span id="modelLoadingDot" class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+              </div>
+              <div id="modelList" class="max-h-52 overflow-y-auto py-1">
+                <div class="px-3 py-2 text-[10px] text-slate-600 italic">Loading models...</div>
+              </div>
+            </div>
           </div>
           <!-- Input -->
           <input
@@ -290,6 +315,65 @@ tailwind.config = {
 // ── State
 let msgCount = 0;
 let isThinking = false;
+let selectedModel = "mistral";
+let modelsLoaded = false;
+
+// ── Model picker
+function toggleModelPicker() {
+  const dropdown = document.getElementById("modelDropdown");
+  const isHidden = dropdown.classList.contains("hidden");
+  if (isHidden) {
+    dropdown.classList.remove("hidden");
+    if (!modelsLoaded) loadModels();
+  } else {
+    dropdown.classList.add("hidden");
+  }
+}
+
+async function loadModels() {
+  const list = document.getElementById("modelList");
+  try {
+    const res  = await fetch("/models");
+    const data = await res.json();
+    modelsLoaded = true;
+    document.getElementById("modelLoadingDot").classList.remove("animate-pulse");
+    document.getElementById("modelLoadingDot").classList.add("bg-tertiary");
+
+    if (!data.models || data.models.length === 0) {
+      list.innerHTML = `<div class="px-3 py-2 text-[10px] text-slate-600 italic">No models found</div>`;
+      return;
+    }
+
+    list.innerHTML = data.models.map(m => `
+      <button onclick="selectModel('${m}')"
+        class="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-surface-variant/50 transition-colors group"
+        id="model-opt-${CSS.escape(m)}">
+        <span class="material-symbols-outlined text-sm ${m === selectedModel ? 'text-secondary fill-icon' : 'text-slate-500 group-hover:text-primary'}">psychology</span>
+        <div class="flex-1 min-w-0">
+          <div class="text-[10px] font-mono text-on-surface truncate">${escHtml(m)}</div>
+        </div>
+        ${m === selectedModel ? '<span class="material-symbols-outlined text-tertiary text-sm fill-icon">check_circle</span>' : ''}
+      </button>
+    `).join("");
+  } catch (e) {
+    list.innerHTML = `<div class="px-3 py-2 text-[10px] text-error italic">Failed to load models</div>`;
+  }
+}
+
+function selectModel(name) {
+  selectedModel = name;
+  document.getElementById("modelLabel").textContent = name.split(":")[0]; // strip tag suffix for display
+  document.getElementById("modelDropdown").classList.add("hidden");
+  // Refresh list to update checkmarks
+  modelsLoaded = false;
+}
+
+// Close dropdown when clicking outside
+document.addEventListener("click", e => {
+  if (!e.target.closest("#modelPickerBtn") && !e.target.closest("#modelDropdown")) {
+    document.getElementById("modelDropdown").classList.add("hidden");
+  }
+});
 
 // ── Helpers
 function setStatus(text, color) {
@@ -314,7 +398,7 @@ function hideEmpty() {
 }
 
 // ── Add message
-function addMessage(text, type, sources, isThinkingMsg) {
+function addMessage(text, type, sources, isThinkingMsg, modelUsed) {
   hideEmpty();
 
   const chat = document.getElementById("chat");
@@ -359,13 +443,20 @@ function addMessage(text, type, sources, isThinkingMsg) {
         </div>`;
     }
 
+    const modelTag = modelUsed
+      ? `<span class="inline-flex items-center gap-1 text-[9px] font-mono text-slate-600 mb-2 block">
+           <span class="material-symbols-outlined text-xs fill-icon text-secondary/60">psychology</span>
+           ${escHtml(modelUsed.split(":")[0])}
+         </span>`
+      : "";
+
     wrap.innerHTML = `
       <div class="flex items-start gap-3 ${maxW}">
         <div class="w-7 h-7 rounded-sm bg-surface-container-highest border border-primary/20 flex items-center justify-center shrink-0 mt-0.5">
           <span class="material-symbols-outlined text-primary text-sm fill-icon">psychology</span>
         </div>
         <div class="flex-1 px-4 py-3 bg-surface-container border border-outline-variant/15 rounded-sm rounded-tl-lg text-sm text-on-surface leading-relaxed font-body">
-          ${escHtml(text)}
+          ${modelTag}${escHtml(text)}
           ${sourcesHTML}
         </div>
       </div>`;
@@ -438,7 +529,7 @@ async function askQuestion() {
     const res = await fetch("/query", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ question }),
+      body:    JSON.stringify({ question, model: selectedModel }),
     });
     const result = await res.json();
 
@@ -446,7 +537,7 @@ async function askQuestion() {
     const thinking = document.getElementById("thinkingMsg");
     if (thinking) thinking.remove();
 
-    addMessage(result.answer, "ai", result.sources);
+    addMessage(result.answer, "ai", result.sources, false, result.model || selectedModel);
 
     // Update sidebar sources
     if (result.sources && result.sources.length) {

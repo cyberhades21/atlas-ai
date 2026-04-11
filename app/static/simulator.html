@@ -228,6 +228,29 @@ tailwind.config = {
         </button>
       </div>
 
+      <!-- Model selector -->
+      <div class="mt-5 border-t border-outline-variant/10 pt-4">
+        <div class="flex justify-between items-center mb-2">
+          <label class="text-[10px] text-slate-500 uppercase tracking-widest">Inference Model</label>
+          <span id="simModelLoadingDot" class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span>
+        </div>
+        <!-- Trigger button -->
+        <button id="simModelBtn" onclick="toggleSimModelPicker()"
+          class="w-full flex items-center justify-between gap-2 bg-surface-container-lowest border border-outline-variant/20 hover:border-primary/40 px-3 py-2 rounded-sm transition-colors">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="material-symbols-outlined text-secondary text-sm fill-icon">psychology</span>
+            <span id="simModelLabel" class="text-[10px] font-mono text-on-surface truncate">mistral</span>
+          </div>
+          <span class="material-symbols-outlined text-slate-500 text-xs shrink-0">expand_more</span>
+        </button>
+        <!-- Dropdown list -->
+        <div id="simModelDropdown" class="hidden mt-1 bg-surface-container border border-outline-variant/20 rounded-sm shadow-xl overflow-hidden">
+          <div id="simModelList" class="max-h-44 overflow-y-auto py-1">
+            <div class="px-3 py-2 text-[10px] text-slate-600 italic">Loading...</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Top-K / Temperature sliders -->
       <div class="mt-5 space-y-3 border-t border-outline-variant/10 pt-4">
         <div class="flex justify-between items-center">
@@ -357,7 +380,7 @@ tailwind.config = {
           <div class="flex justify-between"><span class="text-[10px] text-slate-500 uppercase">Triples</span><span id="ctx-triples" class="text-[10px] font-mono text-primary">—</span></div>
           <div class="flex justify-between"><span class="text-[10px] text-slate-500 uppercase">Embedding dim</span><span id="ctx-dims" class="text-[10px] font-mono text-primary">—</span></div>
           <div class="flex justify-between"><span class="text-[10px] text-slate-500 uppercase">Approx Tokens</span><span id="ctx-tokens" class="text-[10px] font-mono text-primary">—</span></div>
-          <div class="flex justify-between"><span class="text-[10px] text-slate-500 uppercase">Model</span><span id="ctx-model" class="text-[10px] font-mono text-primary">mistral</span></div>
+          <div class="flex justify-between"><span class="text-[10px] text-slate-500 uppercase">Model</span><span id="ctx-model" class="text-[10px] font-mono text-primary">—</span></div>
         </div>
       </div>
     </div>
@@ -500,6 +523,72 @@ const NODE_ICONS = {
 const STEP_LABELS = [
   "query","entities","graph","embed","retrieval","context","prompt","llm","response"
 ];
+
+// ============================================================
+// MODEL PICKER (simulator)
+// ============================================================
+let simSelectedModel = "mistral";
+let simModelsLoaded  = false;
+
+async function loadSimModels() {
+  const list = document.getElementById("simModelList");
+  try {
+    const res  = await fetch("/models");
+    const data = await res.json();
+    simModelsLoaded = true;
+    const dot = document.getElementById("simModelLoadingDot");
+    dot.classList.remove("animate-pulse", "bg-secondary");
+    dot.classList.add("bg-tertiary");
+
+    if (!data.models || data.models.length === 0) {
+      list.innerHTML = `<div class="px-3 py-2 text-[10px] text-slate-600 italic">No models found</div>`;
+      return;
+    }
+
+    list.innerHTML = data.models.map(m => `
+      <button onclick="selectSimModel('${m}')"
+        class="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-surface-variant/50 transition-colors group">
+        <span class="material-symbols-outlined text-sm ${m === simSelectedModel ? 'text-secondary fill-icon' : 'text-slate-500 group-hover:text-primary'}">psychology</span>
+        <span class="flex-1 text-[10px] font-mono text-on-surface truncate">${m}</span>
+        ${m === simSelectedModel ? '<span class="material-symbols-outlined text-tertiary text-xs fill-icon">check_circle</span>' : ''}
+      </button>
+    `).join("");
+  } catch (e) {
+    list.innerHTML = `<div class="px-3 py-2 text-[10px] text-error italic">Failed to load models</div>`;
+  }
+}
+
+function toggleSimModelPicker() {
+  const dd = document.getElementById("simModelDropdown");
+  const isHidden = dd.classList.contains("hidden");
+  if (isHidden) {
+    dd.classList.remove("hidden");
+    if (!simModelsLoaded) loadSimModels();
+  } else {
+    dd.classList.add("hidden");
+  }
+}
+
+function selectSimModel(name) {
+  simSelectedModel = name;
+  document.getElementById("simModelLabel").textContent = name.split(":")[0];
+  document.getElementById("simModelDropdown").classList.add("hidden");
+  // Update ctx-model telemetry display
+  document.getElementById("ctx-model").textContent = name.split(":")[0];
+  // Force re-render so checkmark updates next open
+  simModelsLoaded = false;
+}
+
+// Close on outside click
+document.addEventListener("click", e => {
+  if (!e.target.closest("#simModelBtn") && !e.target.closest("#simModelDropdown")) {
+    const dd = document.getElementById("simModelDropdown");
+    if (dd) dd.classList.add("hidden");
+  }
+});
+
+// Pre-load models in the background on page load
+loadSimModels();
 
 // ============================================================
 // STATE
@@ -826,6 +915,9 @@ function handleEvent(evt) {
     if (step === "prompt_builder") {
       document.getElementById("ctx-tokens").textContent = "~" + (payload.approx_tokens || 0);
     }
+    if (step === "query_received") {
+      document.getElementById("ctx-model").textContent = (payload.model || simSelectedModel).split(":")[0];
+    }
     if (step === "vector_retrieval") {
       renderRetrievedChunks(payload.retrieved_docs || []);
     }
@@ -1143,7 +1235,7 @@ async function startRun() {
   document.getElementById("errorBanner").classList.add("hidden");
   document.getElementById("reasoningTrace").innerHTML = "";
   document.getElementById("retrievedChunks").innerHTML = `<p class="text-[10px] text-slate-600 italic">Awaiting retrieval...</p>`;
-  ["ctx-entities","ctx-triples","ctx-dims","ctx-tokens"].forEach(id => {
+  ["ctx-entities","ctx-triples","ctx-dims","ctx-tokens","ctx-model"].forEach(id => {
     document.getElementById(id).textContent = "—";
   });
 
@@ -1156,6 +1248,7 @@ async function startRun() {
       step_mode: state.stepMode,
       top_k: parseInt(document.getElementById("topkSlider").value, 10),
       temperature: parseFloat(document.getElementById("tempSlider").value),
+      model: simSelectedModel,
     })
   });
   const data = await res.json();

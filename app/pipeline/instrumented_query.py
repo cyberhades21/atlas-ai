@@ -28,7 +28,7 @@ import logging
 from typing import Any, Dict
 
 from app.pipeline.events import bus, PipelineEvent
-from app.ai.llm import generate_answer
+from app.ai.llm import generate_answer, DEFAULT_MODEL
 from app.services.query_service import (
     run_entity_extraction,
     run_graph_search,
@@ -85,6 +85,7 @@ def run_instrumented_pipeline(
     step_mode: bool = False,
     top_k: int = DEFAULT_TOP_K,
     temperature: float = 0.7,
+    model: str = DEFAULT_MODEL,
 ):
     """
     Execute the full RAG pipeline, emitting events at each stage.
@@ -109,6 +110,7 @@ def run_instrumented_pipeline(
             "char_count": len(question),
             "top_k": top_k,
             "temperature": temperature,
+            "model": model,
         })
         _wait_for_gate(run_id)
 
@@ -222,16 +224,16 @@ def run_instrumented_pipeline(
         # STEP 7: llm_generation  (temperature wired here)
         # ----------------------------------------------------------------
         _emit(run_id, "llm_generation", "started", {
-            "model": "mistral",
+            "model": model,
             "approx_input_tokens": approx_tokens,
             "temperature": temperature,
         })
         t0 = time.time()
-        answer = generate_answer(context, question, temperature=temperature)
+        answer = generate_answer(context, question, temperature=temperature, model=model)
         latency = (time.time() - t0) * 1000
         approx_output_tokens = len(answer) // 4
         _emit(run_id, "llm_generation", "completed", {
-            "model": "mistral",
+            "model": model,
             "answer_preview": answer[:300],
             "answer_length_chars": len(answer),
             "approx_output_tokens": approx_output_tokens,
