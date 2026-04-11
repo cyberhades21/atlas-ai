@@ -139,6 +139,13 @@ tailwind.config = {
     background: rgba(28, 31, 42, 0.75);
     backdrop-filter: blur(12px);
   }
+
+  /* Canvas pan cursor */
+  #graphCanvas { cursor: grab; }
+  #graphCanvas:active { cursor: grabbing; }
+
+  /* Viewport transition only on programmatic resets, not drag */
+  #viewport { will-change: transform; }
 </style>
 </head>
 <body class="bg-surface text-on-background font-body overflow-hidden h-screen flex flex-col select-none">
@@ -263,26 +270,29 @@ tailwind.config = {
   <!-- ─────────────────────────────────────────────────── GRAPH CANVAS -->
   <main class="flex-1 relative grid-bg overflow-hidden" id="graphCanvas">
 
-    <!-- SVG edges layer -->
-    <svg id="edgeLayer" class="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <marker id="arrow-idle" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-          <path d="M0,0 L0,6 L8,3 z" fill="rgba(66,71,84,0.4)"/>
-        </marker>
-        <marker id="arrow-active" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-          <path d="M0,0 L0,6 L8,3 z" fill="#3B82F6"/>
-        </marker>
-        <marker id="arrow-done" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-          <path d="M0,0 L0,6 L8,3 z" fill="#4edea3"/>
-        </marker>
-        <marker id="arrow-error" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-          <path d="M0,0 L0,6 L8,3 z" fill="#ffb4ab"/>
-        </marker>
-      </defs>
-    </svg>
+    <!-- Single viewport wrapper — both layers live here so pan/zoom is one transform -->
+    <div id="viewport" class="absolute inset-0" style="transform-origin:0 0;">
+      <!-- SVG edges layer — sized large enough to contain any layout -->
+      <svg id="edgeLayer" class="absolute top-0 left-0 pointer-events-none" style="width:4000px;height:4000px;" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow-idle" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="rgba(66,71,84,0.4)"/>
+          </marker>
+          <marker id="arrow-active" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#3B82F6"/>
+          </marker>
+          <marker id="arrow-done" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#4edea3"/>
+          </marker>
+          <marker id="arrow-error" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#ffb4ab"/>
+          </marker>
+        </defs>
+      </svg>
 
-    <!-- Node containers are positioned absolutely, laid out by JS -->
-    <div id="nodeLayer" class="absolute inset-0"></div>
+      <!-- Node containers are positioned absolutely, laid out by JS -->
+      <div id="nodeLayer" class="absolute top-0 left-0" style="width:4000px;height:4000px;"></div>
+    </div>
 
     <!-- Floating zoom controls -->
     <div class="absolute top-5 left-5 flex bg-surface-container/80 backdrop-blur-md border border-outline-variant/15 rounded-sm z-30">
@@ -514,22 +524,22 @@ let state = {
 // ============================================================
 // LAYOUT
 // ============================================================
-const NODE_W = 110, NODE_H = 80, H_GAP = 60, V_GAP = 0;
+const NODE_W = 120, NODE_H = 84, H_GAP = 64;
+
+// Positions are in viewport-local coordinates (not screen coordinates).
+// The viewport div is 4000×4000; we centre the row in that space.
+const VIEWPORT_W = 4000, VIEWPORT_H = 4000;
 
 function layoutNodes() {
-  const canvas = document.getElementById("graphCanvas");
-  const W = canvas.offsetWidth;
-  const H = canvas.offsetHeight;
-
   const totalWidth = NODES.length * NODE_W + (NODES.length - 1) * H_GAP;
-  const startX = Math.max(20, (W - totalWidth) / 2);
-  const centerY = H / 2 - NODE_H / 2;
+  const startX = (VIEWPORT_W - totalWidth) / 2;
+  const startY = (VIEWPORT_H - NODE_H) / 2;
 
   const positions = {};
   NODES.forEach((n, i) => {
     positions[n.id] = {
       x: startX + i * (NODE_W + H_GAP),
-      y: centerY,
+      y: startY,
       w: NODE_W,
       h: NODE_H,
     };
@@ -1226,31 +1236,95 @@ function resetVisuals() {
 }
 
 // ============================================================
-// ZOOM
+// PAN & ZOOM
 // ============================================================
-function zoom(factor) {
-  state.scale = Math.min(2, Math.max(0.4, state.scale * factor));
+
+// Centre the viewport so the node row is visible on load.
+function centreViewport() {
+  const canvas = document.getElementById("graphCanvas");
+  const W = canvas.offsetWidth;
+  const H = canvas.offsetHeight;
+
+  // Put the centre of the node row (VIEWPORT_W/2, VIEWPORT_H/2) at the
+  // centre of the canvas at scale 1.
+  state.translateX = W / 2 - VIEWPORT_W / 2;
+  state.translateY = H / 2 - VIEWPORT_H / 2;
+  state.scale = 1;
+  applyTransform();
+}
+
+function zoom(factor, pivotX, pivotY) {
+  const canvas = document.getElementById("graphCanvas");
+  // Default pivot: canvas centre
+  if (pivotX == null) {
+    pivotX = canvas.offsetWidth  / 2;
+    pivotY = canvas.offsetHeight / 2;
+  }
+  const newScale = Math.min(2.5, Math.max(0.25, state.scale * factor));
+  const ratio    = newScale / state.scale;
+
+  // Adjust translate so the pivot stays fixed on screen
+  state.translateX = pivotX - ratio * (pivotX - state.translateX);
+  state.translateY = pivotY - ratio * (pivotY - state.translateY);
+  state.scale = newScale;
   applyTransform();
 }
 
 function resetZoom() {
-  state.scale = 1;
-  state.translateX = 0;
-  state.translateY = 0;
-  applyTransform();
+  centreViewport();
 }
 
 function applyTransform() {
-  const canvas = document.getElementById("graphCanvas");
-  // Apply to both layers via a wrapper
-  const nodeLayer = document.getElementById("nodeLayer");
-  const edgeLayer = document.getElementById("edgeLayer");
-  const t = `scale(${state.scale}) translate(${state.translateX}px, ${state.translateY}px)`;
-  nodeLayer.style.transform = t;
-  edgeLayer.style.transform = t;
-  nodeLayer.style.transformOrigin = "center center";
-  edgeLayer.style.transformOrigin = "center center";
+  const vp = document.getElementById("viewport");
+  vp.style.transform = `translate(${state.translateX}px, ${state.translateY}px) scale(${state.scale})`;
 }
+
+// ============================================================
+// PAN (pointer-drag on canvas)
+// ============================================================
+(function initPan() {
+  const canvas = document.getElementById("graphCanvas");
+  let dragging = false, lastX = 0, lastY = 0;
+
+  canvas.addEventListener("pointerdown", e => {
+    // Only pan with left-button or touch; skip clicks on nodes/buttons
+    if (e.target.closest(".absolute.flex") || e.target.closest("button") || e.target.closest("a")) return;
+    dragging = true;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    canvas.setPointerCapture(e.pointerId);
+    canvas.style.cursor = "grabbing";
+  });
+
+  canvas.addEventListener("pointermove", e => {
+    if (!dragging) return;
+    state.translateX += e.clientX - lastX;
+    state.translateY += e.clientY - lastY;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    applyTransform();
+  });
+
+  function stopDrag(e) {
+    if (dragging) {
+      dragging = false;
+      canvas.style.cursor = "";
+      canvas.releasePointerCapture(e.pointerId);
+    }
+  }
+  canvas.addEventListener("pointerup", stopDrag);
+  canvas.addEventListener("pointercancel", stopDrag);
+
+  // Scroll-wheel zoom, pivoting at the mouse cursor
+  canvas.addEventListener("wheel", e => {
+    e.preventDefault();
+    const rect   = canvas.getBoundingClientRect();
+    const pivotX = e.clientX - rect.left;
+    const pivotY = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    zoom(factor, pivotX, pivotY);
+  }, { passive: false });
+})();
 
 // ============================================================
 // REPLAY MODAL
@@ -1326,6 +1400,7 @@ document.querySelectorAll('[onclick*="replayModal"]').forEach(b => {
 window.addEventListener("resize", () => {
   renderGraph();
   renderTimeline();
+  centreViewport();
 });
 
 // Keyboard shortcuts
@@ -1339,6 +1414,7 @@ document.addEventListener("keydown", e => {
 NODES.forEach(n => { state.nodeStates[n.id] = "idle"; });
 renderGraph();
 renderTimeline();
+centreViewport();
 </script>
 </body>
 </html>
