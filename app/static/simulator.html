@@ -603,6 +603,7 @@ let state = {
   completedSteps: [],
   currentStep: null,
   eventSource: null,
+  eventQueue: [],    // buffered events while paused
   scale: 1,
   translateX: 0,
   translateY: 0,
@@ -1225,6 +1226,7 @@ async function startRun() {
   resetVisuals();
   state.running     = true;
   state.paused      = false;
+  state.eventQueue  = [];
   state.completedSteps = [];
   state.currentStep = null;
   state.nodePayloads = {};
@@ -1265,7 +1267,11 @@ async function startRun() {
   es.onmessage = (evt) => {
     try {
       const event = JSON.parse(evt.data);
-      handleEvent(event);
+      if (state.paused) {
+        state.eventQueue.push(event);
+      } else {
+        handleEvent(event);
+      }
     } catch (e) { /* ping / keep-alive */ }
   };
 
@@ -1288,9 +1294,14 @@ function togglePlayPause() {
     document.getElementById("playPauseIcon").textContent = "play_circle";
     return;
   }
-  // We don't actually pause the SSE stream — just toggle UI hint
   state.paused = !state.paused;
   document.getElementById("playPauseIcon").textContent = state.paused ? "play_circle" : "pause_circle";
+  if (!state.paused) {
+    // Flush buffered events now that we're resumed
+    while (state.eventQueue.length) {
+      handleEvent(state.eventQueue.shift());
+    }
+  }
 }
 
 // ============================================================
@@ -1462,9 +1473,13 @@ async function replayRun(runId) {
   es.onmessage = async (evt) => {
     try {
       const event = JSON.parse(evt.data);
-      handleEvent(event);
-      // Slow replay for visual effect
-      await new Promise(r => setTimeout(r, 80));
+      if (state.paused) {
+        state.eventQueue.push(event);
+      } else {
+        handleEvent(event);
+        // Slow replay for visual effect
+        await new Promise(r => setTimeout(r, 80));
+      }
     } catch (e) {}
   };
   es.onerror = () => es.close();

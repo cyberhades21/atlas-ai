@@ -113,7 +113,7 @@ tailwind.config = {
   <div class="flex justify-between items-center px-6 py-3">
     <!-- Brand + Nav -->
     <div class="flex items-center gap-8">
-      <span class="text-xl font-bold tracking-tighter text-primary font-headline">ATLAS AI</span>
+      <span id="atlasLogo" class="text-xl font-bold tracking-tighter text-primary font-headline cursor-default select-none">ATLAS AI</span>
       <nav class="hidden md:flex gap-6">
         <span class="text-primary border-b-2 border-primary-container pb-1 font-headline tracking-tight text-sm cursor-default">Chat</span>
         <a href="/simulator" class="text-slate-400 font-medium hover:text-primary transition-colors font-headline tracking-tight text-sm">Simulator</a>
@@ -134,6 +134,36 @@ tailwind.config = {
         <span class="material-symbols-outlined text-sm">hub</span>
         Simulator
       </a>
+      <!-- Hidden flush button — triple-click the ATLAS logo to reveal -->
+      <button id="flushBtn" onclick="openFlushModal()"
+        class="hidden flex items-center gap-1.5 px-2 py-1.5 border border-error/30 rounded-sm text-[10px] font-label uppercase tracking-widest text-error/60 hover:text-error hover:border-error/60 transition-all">
+        <span class="material-symbols-outlined text-sm">delete_forever</span>
+        Flush
+      </button>
+    </div>
+  </div>
+
+  <!-- Flush confirmation modal -->
+  <div id="flushModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-surface-container border border-error/30 rounded-sm p-6 w-full max-w-sm shadow-2xl">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="material-symbols-outlined text-error text-2xl">warning</span>
+        <h2 class="text-sm font-bold text-on-surface uppercase tracking-widest">Flush All Data</h2>
+      </div>
+      <p class="text-xs text-slate-400 leading-relaxed mb-6">
+        This will permanently delete all vector embeddings and knowledge graph relationships.
+        The chat history on screen is not affected, but future queries will find nothing until you re-index documents.
+      </p>
+      <div class="flex gap-3 justify-end">
+        <button onclick="closeFlushModal()"
+          class="px-4 py-2 text-xs font-label uppercase tracking-widest text-slate-400 hover:text-on-surface border border-outline-variant/20 rounded-sm transition-colors">
+          Cancel
+        </button>
+        <button onclick="confirmFlush()"
+          class="px-4 py-2 text-xs font-label uppercase tracking-widest text-on-primary-container bg-error hover:bg-error/80 rounded-sm transition-colors font-bold">
+          Flush Everything
+        </button>
+      </div>
     </div>
   </div>
 
@@ -308,6 +338,39 @@ tailwind.config = {
 </div>
 
 <script>
+// ── Hidden flush trigger (triple-click ATLAS logo)
+let _logoClicks = 0, _logoTimer = null;
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("atlasLogo")?.addEventListener("click", () => {
+    _logoClicks++;
+    clearTimeout(_logoTimer);
+    _logoTimer = setTimeout(() => { _logoClicks = 0; }, 600);
+    if (_logoClicks >= 3) {
+      _logoClicks = 0;
+      document.getElementById("flushBtn").classList.toggle("hidden");
+    }
+  });
+});
+
+// ── Flush modal
+function openFlushModal()  { document.getElementById("flushModal").classList.remove("hidden"); }
+function closeFlushModal() { document.getElementById("flushModal").classList.add("hidden"); }
+
+async function confirmFlush() {
+  closeFlushModal();
+  try {
+    const res = await fetch("/admin/flush", { method: "DELETE" });
+    const data = await res.json();
+    if (res.ok) {
+      addMessage(`Knowledge base cleared. Removed ${data.vectors_removed} vector chunk(s) and all graph relationships.`, "system");
+    } else {
+      addMessage("Flush failed: " + (data.detail || "unknown error"), "system");
+    }
+  } catch (e) {
+    addMessage("Flush request failed: " + e.message, "system");
+  }
+}
+
 // ── State
 let msgCount = 0;
 let isThinking = false;
@@ -421,6 +484,13 @@ function addMessage(text, type, sources, isThinkingMsg, modelUsed) {
           <span class="w-1.5 h-1.5 rounded-full bg-secondary animate-bounce" style="animation-delay:150ms"></span>
           <span class="w-1.5 h-1.5 rounded-full bg-secondary animate-bounce" style="animation-delay:300ms"></span>
         </div>
+      </div>`;
+  } else if (type === "system") {
+    wrap.className = "flex justify-center msg-enter";
+    wrap.innerHTML = `
+      <div class="flex items-center gap-2 px-4 py-2 bg-error/10 border border-error/20 rounded-sm text-[11px] text-error/80 font-mono">
+        <span class="material-symbols-outlined text-sm">info</span>
+        ${escHtml(text)}
       </div>`;
   } else {
     // AI response
