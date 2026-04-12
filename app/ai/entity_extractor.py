@@ -18,12 +18,15 @@ from app.ai.llm import call_llm_json
 
 logger = logging.getLogger(__name__)
 
-PROMPT = """
-Extract key entities from the text.
+PROMPT = """Extract named entities from the text below.
 
-Return JSON array:
-
-["entity1","entity2","entity3"]
+Rules:
+- Return ONLY a JSON array of strings, nothing else.
+- Use canonical names: no titles, honorifics, or possessives.
+  WRONG: ["President Obama", "Dr. Smith", "Obama's policy"]
+  RIGHT: ["barack obama", "jane smith", "obama policy"]
+- Use lowercase for all entity names.
+- If no entities are found, return [].
 
 Text:
 """
