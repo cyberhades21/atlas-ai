@@ -1,108 +1,1024 @@
 <!DOCTYPE html>
-<html>
-
+<html class="dark" lang="en">
 <head>
-<title>Atlas Vector Explorer</title>
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ATLAS AI | Vector Explorer</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "on-background": "#dfe2f1", "surface": "#0f131d",
+        "outline-variant": "#424754", "surface-bright": "#353944",
+        "surface-container-low": "#171b26", "on-primary-container": "#00285d",
+        "outline": "#8c909f", "surface-container": "#1c1f2a",
+        "tertiary": "#4edea3", "on-surface": "#dfe2f1",
+        "primary": "#adc6ff", "surface-variant": "#313540",
+        "surface-container-highest": "#313540", "surface-container-lowest": "#0a0e18",
+        "background": "#0f131d", "secondary": "#ffb95f",
+        "error": "#ffb4ab", "primary-container": "#4d8eff",
+        "on-primary": "#002e6a", "surface-container-high": "#262a35",
+        "on-surface-variant": "#c2c6d6",
+      },
+      borderRadius: { DEFAULT: "0.125rem", lg: "0.25rem", xl: "0.5rem", full: "0.75rem" },
+      fontFamily: { headline: ["Space Grotesk"], body: ["Inter"], label: ["Inter"], mono: ["JetBrains Mono"] },
+    },
+  },
+}
+</script>
 <style>
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+  .fill-icon { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
 
-body{
-font-family:Arial;
-background:#f7f7f8;
-padding:40px;
-}
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #313540; border-radius: 2px; }
 
-h1{
-margin-bottom:20px;
-}
+  .grid-pattern {
+    background-image: radial-gradient(circle at 1px 1px, rgba(66,71,84,0.45) 1px, transparent 0);
+    background-size: 40px 40px;
+  }
 
-#chart{
-max-width:900px;
-}
+  #vc2d, #vc3d { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #vc3d { display: none; }
 
-.table{
-margin-top:40px;
-background:white;
-padding:20px;
-border-radius:8px;
-}
+  #inspector {
+    transition: transform 0.25s cubic-bezier(0.4,0,0.2,1), opacity 0.2s;
+  }
+  #inspector.hidden-panel { transform: translateX(100%); opacity: 0; pointer-events: none; }
 
-.row{
-margin-bottom:10px;
-padding:8px;
-border-bottom:1px solid #eee;
-}
+  #tooltip {
+    position: fixed; pointer-events: none; z-index: 100;
+    transition: opacity 0.12s;
+  }
 
-.chunk{
-color:#333;
-}
+  .toggle-track {
+    width: 28px; height: 16px; background: #313540;
+    border-radius: 8px; position: relative; cursor: pointer; transition: background 0.2s;
+  }
+  .toggle-track.on-primary { background: rgba(173,198,255,0.3); }
+  .toggle-track.on-secondary { background: rgba(255,185,95,0.3); }
+  .toggle-track.on-tertiary { background: rgba(78,222,163,0.3); }
+  .toggle-thumb {
+    position: absolute; top: 2px; left: 2px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: #8c909f; transition: transform 0.2s, background 0.2s;
+  }
+  .toggle-track.on-primary .toggle-thumb  { transform: translateX(12px); background: #adc6ff; }
+  .toggle-track.on-secondary .toggle-thumb { transform: translateX(12px); background: #ffb95f; }
+  .toggle-track.on-tertiary .toggle-thumb  { transform: translateX(12px); background: #4edea3; }
 
-.doc{
-font-size:12px;
-color:#666;
-}
+  @keyframes livePulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .live-pulse { animation: livePulse 1.4s ease-in-out 3; }
 
+  @keyframes queryPulse {
+    0%,100% { opacity:0.7; r:10; }
+    50%     { opacity:0.2; r:18; }
+  }
+  .query-pulse-svg { animation: queryPulse 1.5s ease-in-out infinite; }
+
+  .score-bar-fill { transition: width 0.4s ease; }
+
+  .glass-panel {
+    background: rgba(28,31,42,0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
 </style>
-
 </head>
+<body class="bg-background text-on-background font-body overflow-hidden h-screen flex flex-col">
 
-<body>
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
+<header class="w-full z-50 bg-surface flex items-center justify-between px-6 py-3 border-b border-outline-variant/15 shrink-0">
+  <div class="flex items-center gap-8">
+    <span class="text-xl font-bold tracking-tighter text-primary font-headline">ATLAS AI</span>
+    <nav class="hidden md:flex gap-6">
+      <a class="text-on-surface-variant font-medium text-sm hover:text-primary transition-colors" href="/">Chat</a>
+      <a class="text-on-surface-variant font-medium text-sm hover:text-primary transition-colors" href="/simulator">Simulator</a>
+      <a class="text-on-surface-variant font-medium text-sm hover:text-primary transition-colors" href="/graph-view">Graph</a>
+      <a class="text-primary border-b border-primary/70 pb-0.5 font-medium text-sm" href="/vectors-ui">Vectors</a>
+    </nav>
+  </div>
+  <div class="flex items-center gap-3 text-on-surface-variant">
+    <span class="text-xs font-mono bg-surface-container px-2 py-1 rounded border border-outline-variant/20" id="stat-points">— pts</span>
+    <span class="text-xs font-mono bg-surface-container px-2 py-1 rounded border border-outline-variant/20" id="stat-docs">— docs</span>
+    <div class="flex items-center gap-1.5">
+      <div class="w-2 h-2 rounded-full bg-outline" id="live-dot"></div>
+      <span class="text-[10px] uppercase tracking-widest text-outline" id="live-label">Connecting</span>
+    </div>
+  </div>
+</header>
 
-<h1>Atlas AI Vector Explorer</h1>
+<!-- ── Body ───────────────────────────────────────────────────────────────── -->
+<div class="flex flex-1 overflow-hidden">
 
-<canvas id="chart"></canvas>
+  <!-- ── Left Sidebar ─────────────────────────────────────────────────────── -->
+  <aside class="w-64 h-full bg-surface-container-low flex flex-col border-r border-outline-variant/15 shrink-0">
+    <div class="p-5 flex flex-col gap-4 flex-1 overflow-y-auto">
 
-<div id="table" class="table"></div>
+      <!-- Title -->
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded bg-primary/20 flex items-center justify-center shrink-0">
+          <span class="material-symbols-outlined text-primary text-sm fill-icon">scatter_plot</span>
+        </div>
+        <div>
+          <h3 class="text-primary font-headline font-bold text-sm leading-tight">Vector Explorer</h3>
+          <p class="text-[10px] text-outline uppercase tracking-widest">Embedding Space</p>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="bg-surface-container rounded p-3 space-y-2 border border-outline-variant/10">
+        <div class="flex justify-between items-center">
+          <span class="text-[10px] uppercase tracking-widest text-outline">Points</span>
+          <span class="text-sm font-mono text-primary" id="sb-points">—</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-[10px] uppercase tracking-widest text-outline">Documents</span>
+          <span class="text-sm font-mono text-primary" id="sb-docs">—</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-[10px] uppercase tracking-widest text-outline">Dimensions</span>
+          <span class="text-sm font-mono text-on-surface-variant">768</span>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-[10px] uppercase tracking-widest text-outline">Reduction</span>
+          <span class="text-sm font-mono text-on-surface-variant">PCA→2D/3D</span>
+        </div>
+      </div>
+
+      <!-- Display Controls -->
+      <div class="space-y-1">
+        <p class="text-[10px] uppercase tracking-widest text-outline mb-2">Display</p>
+
+        <button class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-surface-container transition-colors" onclick="toggleOpt('colorByDoc')">
+          <span class="text-xs text-on-surface-variant">Color by document</span>
+          <div class="toggle-track on-primary" id="toggle-colorByDoc"><div class="toggle-thumb"></div></div>
+        </button>
+        <button class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-surface-container transition-colors" onclick="toggleOpt('clusters')">
+          <span class="text-xs text-on-surface-variant">Cluster halos</span>
+          <div class="toggle-track on-tertiary" id="toggle-clusters"><div class="toggle-thumb"></div></div>
+        </button>
+      </div>
+
+      <!-- Query Overlay Controls -->
+      <div class="space-y-1">
+        <p class="text-[10px] uppercase tracking-widest text-outline mb-2">Last Query Overlay</p>
+        <button class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-surface-container transition-colors" onclick="toggleOpt('showQueryOverlay')">
+          <span class="text-xs text-on-surface-variant">Show query &amp; retrieved</span>
+          <div class="toggle-track on-secondary" id="toggle-showQueryOverlay"><div class="toggle-thumb"></div></div>
+        </button>
+        <button class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-surface-container transition-colors" onclick="toggleOpt('showOnlyRetrieved')">
+          <span class="text-xs text-on-surface-variant">Retrieved only</span>
+          <div class="toggle-track" id="toggle-showOnlyRetrieved"><div class="toggle-thumb"></div></div>
+        </button>
+        <button class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-surface-container transition-colors" onclick="toggleOpt('showRetrievalLines')">
+          <span class="text-xs text-on-surface-variant">Retrieval lines</span>
+          <div class="toggle-track on-secondary" id="toggle-showRetrievalLines"><div class="toggle-thumb"></div></div>
+        </button>
+        <button onclick="refreshQuery()" class="w-full mt-1 flex items-center gap-2 px-3 py-2 rounded text-xs text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors">
+          <span class="material-symbols-outlined text-base">refresh</span>Refresh Query Data
+        </button>
+      </div>
+
+      <!-- Zoom Controls -->
+      <div class="space-y-1">
+        <p class="text-[10px] uppercase tracking-widest text-outline mb-2">Navigation</p>
+        <div class="flex gap-2">
+          <button onclick="zoom(1.3)" class="flex-1 py-1.5 text-xs bg-surface-container hover:bg-surface-container-highest rounded border border-outline-variant/20 transition-colors">
+            <span class="material-symbols-outlined text-base leading-none">zoom_in</span>
+          </button>
+          <button onclick="zoom(0.77)" class="flex-1 py-1.5 text-xs bg-surface-container hover:bg-surface-container-highest rounded border border-outline-variant/20 transition-colors">
+            <span class="material-symbols-outlined text-base leading-none">zoom_out</span>
+          </button>
+          <button onclick="fitAll()" class="flex-1 py-1.5 text-xs bg-surface-container hover:bg-surface-container-highest rounded border border-outline-variant/20 transition-colors">
+            <span class="material-symbols-outlined text-base leading-none">fit_screen</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div id="legend" class="space-y-1.5">
+        <p class="text-[10px] uppercase tracking-widest text-outline mb-2">Legend</p>
+        <div class="flex items-center gap-2">
+          <div class="w-3 h-3 rounded-full bg-secondary/80 ring-1 ring-secondary/40"></div>
+          <span class="text-[10px] text-on-surface-variant">Retrieved chunk</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="w-3 h-3 rounded-full bg-[#F59E0B] ring-2 ring-[#F59E0B]/30"></div>
+          <span class="text-[10px] text-on-surface-variant">Query vector</span>
+        </div>
+        <div id="doc-legend" class="space-y-1 mt-1"></div>
+      </div>
+    </div>
+
+    <!-- Bottom nav -->
+    <div class="p-4 border-t border-outline-variant/15 space-y-1">
+      <a href="/simulator" class="flex items-center gap-2 px-3 py-1.5 rounded text-xs text-outline hover:text-primary hover:bg-surface-container transition-colors">
+        <span class="material-symbols-outlined text-base">lan</span>Simulator
+      </a>
+      <a href="/graph-view" class="flex items-center gap-2 px-3 py-1.5 rounded text-xs text-outline hover:text-primary hover:bg-surface-container transition-colors">
+        <span class="material-symbols-outlined text-base">account_tree</span>Knowledge Graph
+      </a>
+    </div>
+  </aside>
+
+  <!-- ── Main Canvas Area ──────────────────────────────────────────────────── -->
+  <main class="flex-1 flex flex-col relative overflow-hidden">
+
+    <!-- Sub-header -->
+    <div class="flex items-center justify-between px-6 py-3 border-b border-outline-variant/10 shrink-0 bg-surface/50">
+      <div>
+        <h1 class="text-2xl font-headline font-bold tracking-tighter text-on-background leading-tight">Vector Explorer</h1>
+        <p class="text-xs text-on-surface-variant mt-0.5">Semantic embedding space — PCA projection</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <!-- 2D/3D toggle -->
+        <div class="flex bg-surface-container rounded p-0.5 border border-outline-variant/15">
+          <button id="btn-2d" onclick="setMode('2d')" class="px-4 py-1 text-[10px] font-bold uppercase tracking-widest bg-primary text-on-primary rounded transition-all">2D</button>
+          <button id="btn-3d" onclick="setMode('3d')" class="px-4 py-1 text-[10px] font-bold uppercase tracking-widest text-outline hover:text-on-surface rounded transition-all">3D</button>
+        </div>
+        <button onclick="fitAll()" class="p-1.5 bg-surface-container border border-outline-variant/15 rounded hover:bg-surface-container-highest transition-colors" title="Fit all">
+          <span class="material-symbols-outlined text-sm leading-none text-on-surface-variant">fit_screen</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Plot canvas -->
+    <div class="flex-1 relative grid-pattern" id="plot-wrap">
+      <canvas id="vc2d"></canvas>
+      <canvas id="vc3d"></canvas>
+
+      <!-- Cursor coordinate overlay -->
+      <div class="absolute top-3 left-3 bg-surface-container/80 backdrop-blur-sm px-2.5 py-1.5 rounded border border-outline-variant/15 pointer-events-none">
+        <p class="text-[8px] uppercase tracking-widest text-outline">Cursor</p>
+        <p class="text-[10px] font-mono text-primary" id="cursor-coords">[—, —]</p>
+      </div>
+
+      <!-- Empty state -->
+      <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center hidden">
+        <span class="material-symbols-outlined text-5xl text-outline/30 mb-4">scatter_plot</span>
+        <p class="text-on-surface-variant font-medium">No vectors indexed yet</p>
+        <p class="text-xs text-outline mt-1">Upload a document to start exploring embedding space</p>
+      </div>
+    </div>
+
+    <!-- Floating bottom bar -->
+    <div class="absolute bottom-5 left-1/2 -translate-x-1/2 glass-panel border border-outline-variant/20 rounded-full px-6 py-3 flex items-center gap-6 shadow-2xl z-10">
+      <label class="flex items-center gap-2 cursor-pointer" title="Show only retrieved chunks">
+        <div class="toggle-track" id="toggle-bot-retrieved" onclick="toggleOpt('showOnlyRetrieved')"><div class="toggle-thumb"></div></div>
+        <span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Retrieved Only</span>
+      </label>
+      <div class="w-px h-4 bg-outline-variant/30"></div>
+      <label class="flex items-center gap-2 cursor-pointer" title="Show cluster halos">
+        <div class="toggle-track on-tertiary" id="toggle-bot-clusters" onclick="toggleOpt('clusters')"><div class="toggle-thumb"></div></div>
+        <span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Clusters</span>
+      </label>
+      <div class="w-px h-4 bg-outline-variant/30"></div>
+      <label class="flex items-center gap-2 cursor-pointer" title="Show query &amp; retrieval overlay">
+        <div class="toggle-track on-secondary" id="toggle-bot-overlay" onclick="toggleOpt('showQueryOverlay')"><div class="toggle-thumb"></div></div>
+        <span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Query Overlay</span>
+      </label>
+      <div class="w-px h-4 bg-outline-variant/30"></div>
+      <div class="flex items-center gap-2">
+        <span class="text-[10px] font-bold uppercase tracking-widest text-outline">Size</span>
+        <input id="density-slider" type="range" min="0.5" max="2.5" step="0.1" value="1" class="w-20 h-1 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-primary" oninput="onDensity(this.value)"/>
+      </div>
+    </div>
+  </main>
+
+  <!-- ── Right Inspector Panel ─────────────────────────────────────────────── -->
+  <aside id="inspector" class="hidden-panel w-80 h-full bg-surface-container-low border-l border-outline-variant/15 flex flex-col shrink-0 z-20">
+    <div class="p-5 border-b border-outline-variant/15">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-[10px] font-bold tracking-widest uppercase text-outline">Node Inspector</h2>
+        <button onclick="closeInspector()" class="text-outline hover:text-on-surface transition-colors">
+          <span class="material-symbols-outlined text-base">close</span>
+        </button>
+      </div>
+      <!-- Status badge -->
+      <div id="insp-badge" class="hidden px-2 py-0.5 bg-secondary/10 border border-secondary/20 text-secondary text-[8px] font-bold uppercase tracking-tighter rounded-full inline-block mb-3">Retrieved</div>
+      <!-- Score bar -->
+      <div id="insp-score-wrap" class="bg-surface-container-highest/30 p-3 border-l-2 border-secondary rounded hidden">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-[10px] font-bold text-outline">SIMILARITY SCORE</span>
+          <span id="insp-score-val" class="text-sm font-mono font-bold text-secondary">—</span>
+        </div>
+        <div class="w-full bg-surface-container h-1 rounded-full overflow-hidden">
+          <div id="insp-score-bar" class="bg-secondary h-full score-bar-fill" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-5 space-y-5">
+      <!-- Chunk text -->
+      <div>
+        <h3 class="text-[10px] font-bold uppercase tracking-widest text-outline mb-2">Chunk Content</h3>
+        <div id="insp-text" class="p-3 bg-surface-container rounded border border-outline-variant/10 text-xs text-on-surface/90 font-light leading-relaxed max-h-48 overflow-y-auto"></div>
+      </div>
+      <!-- Metadata -->
+      <div>
+        <h3 class="text-[10px] font-bold uppercase tracking-widest text-outline mb-2">Source Metadata</h3>
+        <div class="space-y-2">
+          <div class="flex justify-between border-b border-outline-variant/10 pb-1.5">
+            <span class="text-xs text-outline">Document</span>
+            <span id="insp-doc" class="text-xs text-on-surface font-medium text-right max-w-[160px] truncate"></span>
+          </div>
+          <div class="flex justify-between border-b border-outline-variant/10 pb-1.5">
+            <span class="text-xs text-outline">Chunk ID</span>
+            <span id="insp-id" class="text-xs text-on-surface font-mono truncate max-w-[160px]"></span>
+          </div>
+          <div class="flex justify-between border-b border-outline-variant/10 pb-1.5">
+            <span class="text-xs text-outline">Dimensions</span>
+            <span class="text-xs text-on-surface">768</span>
+          </div>
+          <div class="flex justify-between border-b border-outline-variant/10 pb-1.5">
+            <span class="text-xs text-outline">Projection</span>
+            <span id="insp-xy" class="text-xs text-on-surface font-mono"></span>
+          </div>
+        </div>
+      </div>
+      <!-- Nearest neighbors -->
+      <div>
+        <h3 class="text-[10px] font-bold uppercase tracking-widest text-outline mb-2">Nearest Neighbors</h3>
+        <div id="insp-neighbors" class="space-y-2"></div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<!-- Tooltip -->
+<div id="tooltip" class="opacity-0">
+  <div class="glass-panel border border-outline-variant/20 rounded px-3 py-2 text-xs text-on-surface max-w-[200px] shadow-xl">
+    <div id="tt-doc" class="text-[10px] text-outline font-mono mb-0.5 truncate"></div>
+    <div id="tt-text" class="leading-snug line-clamp-2"></div>
+  </div>
+</div>
 
 <script>
+// ── State ──────────────────────────────────────────────────────────────────
+const S = {
+  points: [],
+  pointsById: {},
+  mode: "2d",
+  colorByDoc: true,
+  clusters: true,
+  showQueryOverlay: true,
+  showOnlyRetrieved: false,
+  showRetrievalLines: true,
+  selectedId: null,
+  hoveredId: null,
+  panX: 0, panY: 0, scale: 1,
+  sizeMultiplier: 1,
+  // query overlay
+  lastRetrieved: [],
+  lastQueryXY: null,
+  lastQueryScore: {},
+  // computed
+  docColors: {},
+  kmClusters: null,
+  kmVersion: -1,
+};
 
-async function loadVectors(){
+// MD3 palette for document colors
+const DOC_PALETTE = [
+  "#adc6ff","#4edea3","#ffb95f","#80cbc4","#ce93d8",
+  "#ef9a9a","#fff176","#80deea","#ffcc80","#a5d6a7",
+];
 
-let response = await fetch("/vectors")
-
-let data = await response.json()
-
-let xs = data.map(v => v.x)
-let ys = data.map(v => v.y)
-
-let ctx = document.getElementById('chart')
-
-new Chart(ctx,{
-type:'scatter',
-data:{
-datasets:[{
-label:'Document Chunks',
-data:data.map(v=>({x:v.x,y:v.y})),
-backgroundColor:'#2563eb'
-}]
-}
-})
-
-let table = document.getElementById("table")
-
-data.forEach(v => {
-
-let row = document.createElement("div")
-
-row.className="row"
-
-row.innerHTML =
-
-"<div class='chunk'>" + v.text + "</div>" +
-"<div class='doc'>Source: " + v.document + "</div>"
-
-table.appendChild(row)
-
-})
-
+function docColor(doc) {
+  if (!S.docColors[doc]) {
+    const keys = Object.keys(S.docColors);
+    S.docColors[doc] = DOC_PALETTE[keys.length % DOC_PALETTE.length];
+  }
+  return S.docColors[doc];
 }
 
-loadVectors()
+// ── Canvas 2D ─────────────────────────────────────────────────────────────
+const canvas2d = document.getElementById("vc2d");
+const ctx = canvas2d.getContext("2d");
+let W = 0, H = 0;
 
+function resizeCanvas() {
+  const wrap = document.getElementById("plot-wrap");
+  W = canvas2d.width = wrap.clientWidth;
+  H = canvas2d.height = wrap.clientHeight;
+  if (S.mode === "2d") redraw();
+  else resize3D();
+}
+window.addEventListener("resize", resizeCanvas);
+
+function toScreenX(dx) { return (dx - S.panX) * S.scale + W / 2; }
+function toScreenY(dy) { return (dy - S.panY) * S.scale + H / 2; }
+function toDataX(sx)  { return (sx - W / 2) / S.scale + S.panX; }
+function toDataY(sy)  { return (sy - H / 2) / S.scale + S.panY; }
+
+function fitAll() {
+  if (!S.points.length) return;
+  const xs = S.points.map(p => p.x), ys = S.points.map(p => p.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  const rangeX = maxX - minX || 1, rangeY = maxY - minY || 1;
+  S.panX = cx; S.panY = cy;
+  S.scale = Math.min(W / rangeX, H / rangeY) * 0.72;
+  redraw();
+  if (S.mode === "3d") update3DPositions();
+}
+
+function zoom(factor) {
+  S.scale *= factor;
+  redraw();
+}
+
+// ── k-means (lightweight, 5 clusters, 20 iter) ────────────────────────────
+function runKMeans(pts, k = 5, iter = 20) {
+  if (pts.length < k) k = pts.length;
+  let centroids = pts.slice(0, k).map(p => ({ x: p.x, y: p.y }));
+  let labels = new Array(pts.length).fill(0);
+  for (let it = 0; it < iter; it++) {
+    // assign
+    for (let i = 0; i < pts.length; i++) {
+      let best = 0, bd = Infinity;
+      for (let j = 0; j < k; j++) {
+        const d = (pts[i].x - centroids[j].x) ** 2 + (pts[i].y - centroids[j].y) ** 2;
+        if (d < bd) { bd = d; best = j; }
+      }
+      labels[i] = best;
+    }
+    // update
+    const sums = Array.from({ length: k }, () => ({ x: 0, y: 0, n: 0 }));
+    pts.forEach((p, i) => { sums[labels[i]].x += p.x; sums[labels[i]].y += p.y; sums[labels[i]].n++; });
+    centroids = sums.map((s, j) => s.n ? { x: s.x / s.n, y: s.y / s.n } : centroids[j]);
+  }
+  // radii
+  const radii = new Array(k).fill(0);
+  pts.forEach((p, i) => {
+    const d = Math.sqrt((p.x - centroids[labels[i]].x) ** 2 + (p.y - centroids[labels[i]].y) ** 2);
+    if (d > radii[labels[i]]) radii[labels[i]] = d;
+  });
+  return { labels, centroids, radii };
+}
+
+// ── Redraw (2D) ───────────────────────────────────────────────────────────
+const CLUSTER_COLORS = ["#adc6ff","#4edea3","#ffb95f","#ce93d8","#80cbc4"];
+
+function redraw() {
+  if (S.mode !== "2d") return;
+  ctx.clearRect(0, 0, W, H);
+  if (!S.points.length) return;
+
+  const pts = S.showOnlyRetrieved && S.showQueryOverlay && S.lastRetrieved.length
+    ? S.points.filter(p => S.lastRetrieved.includes(p.id))
+    : S.points;
+
+  // ── Cluster halos ──
+  if (S.clusters && S.points.length >= 3) {
+    const ver = S.points.length;
+    if (S.kmVersion !== ver) {
+      S.kmClusters = runKMeans(S.points, Math.min(5, S.points.length));
+      S.kmVersion = ver;
+    }
+    const km = S.kmClusters;
+    km.centroids.forEach((c, j) => {
+      const r = Math.max(km.radii[j] * S.scale * 1.2, 30);
+      const sx = toScreenX(c.x), sy = toScreenY(c.y);
+      const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
+      grad.addColorStop(0, CLUSTER_COLORS[j % CLUSTER_COLORS.length] + "22");
+      grad.addColorStop(1, "transparent");
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+    });
+  }
+
+  // ── Retrieval lines ──
+  if (S.showQueryOverlay && S.showRetrievalLines && S.lastQueryXY && S.lastRetrieved.length) {
+    const qsx = toScreenX(S.lastQueryXY.x), qsy = toScreenY(S.lastQueryXY.y);
+    ctx.save();
+    ctx.setLineDash([4, 6]);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255,185,95,0.35)";
+    S.lastRetrieved.forEach(id => {
+      const p = S.pointsById[id];
+      if (!p) return;
+      ctx.beginPath();
+      ctx.moveTo(qsx, qsy);
+      ctx.lineTo(toScreenX(p.x), toScreenY(p.y));
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  // ── Points ──
+  const sz = S.sizeMultiplier;
+  pts.forEach(p => {
+    const sx = toScreenX(p.x), sy = toScreenY(p.y);
+    const isRetrieved = S.showQueryOverlay && S.lastRetrieved.includes(p.id);
+    const isSelected = p.id === S.selectedId;
+    const isHovered = p.id === S.hoveredId;
+
+    let radius = 5 * sz;
+    let color = S.colorByDoc ? docColor(p.document) : "#adc6ff";
+    let alpha = 0.75;
+
+    if (isRetrieved) { radius = 8 * sz; color = "#ffb95f"; alpha = 1; }
+    if (isSelected)  { radius = 9 * sz; alpha = 1; }
+    if (!isRetrieved && S.showOnlyRetrieved && S.showQueryOverlay) alpha = 0.12;
+
+    // Glow for retrieved
+    if (isRetrieved || isHovered) {
+      ctx.save();
+      ctx.shadowBlur = isRetrieved ? 16 : 10;
+      ctx.shadowColor = isRetrieved ? "#ffb95f" : "#adc6ff";
+    }
+
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(sx, sy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    if (isRetrieved || isHovered) ctx.restore();
+
+    // Selection ring
+    if (isSelected) {
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.arc(sx, sy, radius + 3, 0, Math.PI * 2);
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  });
+
+  // ── Query vector (diamond) ──
+  if (S.showQueryOverlay && S.lastQueryXY) {
+    const qsx = toScreenX(S.lastQueryXY.x), qsy = toScreenY(S.lastQueryXY.y);
+    const r = 10 * sz;
+
+    // Pulsing ring
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    ctx.beginPath();
+    ctx.arc(qsx, qsy, r * 1.9, 0, Math.PI * 2);
+    ctx.fillStyle = "#F59E0B";
+    ctx.fill();
+    ctx.restore();
+
+    // Glow
+    ctx.save();
+    ctx.shadowBlur = 24;
+    ctx.shadowColor = "#F59E0B";
+    // Diamond shape
+    ctx.beginPath();
+    ctx.moveTo(qsx, qsy - r);
+    ctx.lineTo(qsx + r, qsy);
+    ctx.lineTo(qsx, qsy + r);
+    ctx.lineTo(qsx - r, qsy);
+    ctx.closePath();
+    ctx.fillStyle = "#F59E0B";
+    ctx.fill();
+    ctx.restore();
+
+    // Label
+    ctx.font = "bold 9px Inter, sans-serif";
+    ctx.fillStyle = "#F59E0B";
+    ctx.fillText("QUERY", qsx + r + 4, qsy + 4);
+  }
+}
+
+// ── 3D (Three.js) ─────────────────────────────────────────────────────────
+let renderer3, scene3, camera3, controls3, points3Mesh, retrieved3Mesh, queryMesh3, lines3 = [];
+let animFrame3 = null;
+
+function init3D() {
+  const c = document.getElementById("vc3d");
+  c.width = W; c.height = H;
+
+  renderer3 = new THREE.WebGLRenderer({ canvas: c, antialias: true, alpha: true });
+  renderer3.setSize(W, H);
+  renderer3.setClearColor(0x000000, 0);
+
+  scene3 = new THREE.Scene();
+  camera3 = new THREE.PerspectiveCamera(60, W / H, 0.01, 1000);
+  camera3.position.set(0, 0, 3);
+
+  // Minimal OrbitControls inline (pointer events)
+  let _dragging = false, _lastX = 0, _lastY = 0;
+  const _euler = new THREE.Euler(0, 0, 0, "YXZ");
+  c.addEventListener("pointerdown", e => { _dragging = true; _lastX = e.clientX; _lastY = e.clientY; });
+  window.addEventListener("pointerup", () => { _dragging = false; });
+  window.addEventListener("pointermove", e => {
+    if (!_dragging || S.mode !== "3d") return;
+    _euler.y += (e.clientX - _lastX) * 0.005;
+    _euler.x += (e.clientY - _lastY) * 0.005;
+    _euler.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, _euler.x));
+    camera3.position.set(0, 0, camera3.position.z);
+    camera3.rotation.copy(_euler);
+    // orbit: rotate the whole scene instead
+    scene3.rotation.y += (e.clientX - _lastX) * 0.005;
+    scene3.rotation.x += (e.clientY - _lastY) * 0.005;
+    _lastX = e.clientX; _lastY = e.clientY;
+  });
+  c.addEventListener("wheel", e => {
+    camera3.position.z = Math.max(0.5, Math.min(10, camera3.position.z + e.deltaY * 0.005));
+  }, { passive: true });
+
+  update3DPositions();
+  animate3();
+}
+
+function update3DPositions() {
+  if (!scene3) return;
+  // Remove old
+  [points3Mesh, retrieved3Mesh, queryMesh3].forEach(m => m && scene3.remove(m));
+  lines3.forEach(l => scene3.remove(l));
+  lines3 = [];
+
+  if (!S.points.length) return;
+
+  // Normalize to [-1, 1]
+  const xs = S.points.map(p => p.x), ys = S.points.map(p => p.y);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const rangeX = (Math.max(...xs) - Math.min(...xs)) || 1;
+  const rangeY = (Math.max(...ys) - Math.min(...ys)) || 1;
+  const scale = 2 / Math.max(rangeX, rangeY);
+
+  const posArr = [], colArr = [], retPosArr = [];
+  const retrievedSet = new Set(S.lastRetrieved);
+
+  S.points.forEach(p => {
+    const nx = (p.x - cx) * scale;
+    const ny = (p.y - cy) * scale;
+    const nz = 0;
+    if (retrievedSet.has(p.id) && S.showQueryOverlay) {
+      retPosArr.push(nx, ny, nz);
+    } else {
+      posArr.push(nx, ny, nz);
+      const c = S.colorByDoc ? new THREE.Color(docColor(p.document)) : new THREE.Color(0xadc6ff);
+      colArr.push(c.r, c.g, c.b);
+    }
+  });
+
+  if (posArr.length) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(posArr, 3));
+    geo.setAttribute("color", new THREE.Float32BufferAttribute(colArr, 3));
+    const mat = new THREE.PointsMaterial({ size: 0.05 * S.sizeMultiplier, vertexColors: true, sizeAttenuation: true });
+    points3Mesh = new THREE.Points(geo, mat);
+    scene3.add(points3Mesh);
+  }
+
+  if (retPosArr.length && S.showQueryOverlay) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(retPosArr, 3));
+    const mat = new THREE.PointsMaterial({ size: 0.09 * S.sizeMultiplier, color: 0xffb95f, blending: THREE.AdditiveBlending, transparent: true, opacity: 0.9 });
+    retrieved3Mesh = new THREE.Points(geo, mat);
+    scene3.add(retrieved3Mesh);
+  }
+
+  // Query vector
+  if (S.showQueryOverlay && S.lastQueryXY) {
+    const qx = (S.lastQueryXY.x - cx) * scale;
+    const qy = (S.lastQueryXY.y - cy) * scale;
+    const geo = new THREE.SphereGeometry(0.06, 8, 8);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xF59E0B });
+    queryMesh3 = new THREE.Mesh(geo, mat);
+    queryMesh3.position.set(qx, qy, 0);
+    scene3.add(queryMesh3);
+
+    // Lines to retrieved
+    if (S.showRetrievalLines) {
+      S.lastRetrieved.forEach(id => {
+        const p = S.pointsById[id];
+        if (!p) return;
+        const px = (p.x - cx) * scale, py = (p.y - cy) * scale;
+        const geo = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(qx, qy, 0),
+          new THREE.Vector3(px, py, 0),
+        ]);
+        const mat = new THREE.LineBasicMaterial({ color: 0xffb95f, transparent: true, opacity: 0.3 });
+        const line = new THREE.Line(geo, mat);
+        scene3.add(line);
+        lines3.push(line);
+      });
+    }
+  }
+}
+
+function animate3() {
+  if (S.mode !== "3d") return;
+  animFrame3 = requestAnimationFrame(animate3);
+  renderer3.render(scene3, camera3);
+}
+
+function resize3D() {
+  if (!renderer3) return;
+  renderer3.setSize(W, H);
+  camera3.aspect = W / H;
+  camera3.updateProjectionMatrix();
+}
+
+// ── Mode switch ───────────────────────────────────────────────────────────
+function setMode(m) {
+  S.mode = m;
+  const c2 = document.getElementById("vc2d");
+  const c3 = document.getElementById("vc3d");
+  document.getElementById("btn-2d").className = m === "2d"
+    ? "px-4 py-1 text-[10px] font-bold uppercase tracking-widest bg-primary text-on-primary rounded transition-all"
+    : "px-4 py-1 text-[10px] font-bold uppercase tracking-widest text-outline hover:text-on-surface rounded transition-all";
+  document.getElementById("btn-3d").className = m === "3d"
+    ? "px-4 py-1 text-[10px] font-bold uppercase tracking-widest bg-primary text-on-primary rounded transition-all"
+    : "px-4 py-1 text-[10px] font-bold uppercase tracking-widest text-outline hover:text-on-surface rounded transition-all";
+  if (m === "2d") {
+    c2.style.display = "block"; c3.style.display = "none";
+    if (animFrame3) cancelAnimationFrame(animFrame3);
+    redraw();
+  } else {
+    c2.style.display = "none"; c3.style.display = "block";
+    if (!renderer3) init3D(); else { update3DPositions(); animate3(); }
+  }
+}
+
+// ── Toggles ───────────────────────────────────────────────────────────────
+const TOGGLE_COLOR = {
+  colorByDoc: "on-primary", clusters: "on-tertiary",
+  showQueryOverlay: "on-secondary", showOnlyRetrieved: "on-secondary",
+  showRetrievalLines: "on-secondary",
+};
+
+function toggleOpt(key) {
+  S[key] = !S[key];
+  // Sync all toggle tracks with this key
+  document.querySelectorAll(`[id*="toggle-"][id*="${key.toLowerCase()}"], #toggle-${key}`)
+    .forEach(el => {
+      const cls = TOGGLE_COLOR[key] || "on-primary";
+      el.className = `toggle-track${S[key] ? " " + cls : ""}`;
+    });
+  // Also sync bottom bar mirrors
+  const mirrorMap = {
+    showOnlyRetrieved: "toggle-bot-retrieved",
+    clusters: "toggle-bot-clusters",
+    showQueryOverlay: "toggle-bot-overlay",
+  };
+  if (mirrorMap[key]) {
+    const el = document.getElementById(mirrorMap[key]);
+    const cls = TOGGLE_COLOR[key] || "on-primary";
+    if (el) el.className = `toggle-track${S[key] ? " " + cls : ""}`;
+  }
+  if (S.mode === "3d") update3DPositions();
+  redraw();
+}
+
+function onDensity(v) {
+  S.sizeMultiplier = parseFloat(v);
+  redraw();
+  if (S.mode === "3d") update3DPositions();
+}
+
+// ── Inspector ─────────────────────────────────────────────────────────────
+function openInspector(p) {
+  S.selectedId = p.id;
+  const score = S.lastQueryScore[p.id];
+  const isRetrieved = S.lastRetrieved.includes(p.id);
+
+  document.getElementById("inspector").classList.remove("hidden-panel");
+  document.getElementById("insp-badge").classList.toggle("hidden", !isRetrieved);
+  document.getElementById("insp-score-wrap").classList.toggle("hidden", !isRetrieved);
+  if (isRetrieved && score !== undefined) {
+    document.getElementById("insp-score-val").textContent = score.toFixed(4);
+    document.getElementById("insp-score-bar").style.width = (score * 100) + "%";
+  }
+
+  document.getElementById("insp-text").textContent = p.text;
+  document.getElementById("insp-doc").textContent = p.document;
+  document.getElementById("insp-id").textContent = p.id;
+  document.getElementById("insp-xy").textContent = `[${p.x.toFixed(3)}, ${p.y.toFixed(3)}]`;
+
+  // Nearest neighbors (Euclidean in 2D)
+  const dists = S.points
+    .filter(q => q.id !== p.id)
+    .map(q => ({ q, d: Math.hypot(q.x - p.x, q.y - p.y) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, 3);
+
+  const nb = document.getElementById("insp-neighbors");
+  nb.innerHTML = dists.map(({ q, d }) => `
+    <div class="flex items-start gap-2 p-2 bg-surface-container rounded border border-outline-variant/10 cursor-pointer hover:border-primary/30 transition-colors"
+         onclick="openInspector(S.pointsById['${q.id}'])">
+      <div class="w-2 h-2 rounded-full mt-1 shrink-0" style="background:${S.colorByDoc ? docColor(q.document) : '#adc6ff'}"></div>
+      <div class="min-w-0">
+        <p class="text-[10px] text-outline font-mono truncate">${q.document}</p>
+        <p class="text-xs text-on-surface/80 line-clamp-2 leading-snug">${q.text.slice(0, 80)}</p>
+        <p class="text-[10px] text-outline mt-0.5">dist: ${d.toFixed(4)}</p>
+      </div>
+    </div>`).join("");
+
+  redraw();
+}
+
+function closeInspector() {
+  S.selectedId = null;
+  document.getElementById("inspector").classList.add("hidden-panel");
+  redraw();
+}
+
+// ── Tooltip ───────────────────────────────────────────────────────────────
+const tooltip = document.getElementById("tooltip");
+function showTooltip(p, x, y) {
+  document.getElementById("tt-doc").textContent = p.document;
+  document.getElementById("tt-text").textContent = p.text.slice(0, 100);
+  tooltip.style.left = (x + 14) + "px";
+  tooltip.style.top  = (y - 10) + "px";
+  tooltip.style.opacity = "1";
+}
+function hideTooltip() { tooltip.style.opacity = "0"; }
+
+// ── Canvas 2D interactions ────────────────────────────────────────────────
+let panning = false, panStartX = 0, panStartY = 0, panStartPanX = 0, panStartPanY = 0;
+
+canvas2d.addEventListener("pointerdown", e => {
+  panning = true;
+  panStartX = e.clientX; panStartY = e.clientY;
+  panStartPanX = S.panX; panStartPanY = S.panY;
+  canvas2d.setPointerCapture(e.pointerId);
+});
+canvas2d.addEventListener("pointermove", e => {
+  const rect = canvas2d.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  document.getElementById("cursor-coords").textContent =
+    `[${toDataX(mx).toFixed(3)}, ${toDataY(my).toFixed(3)}]`;
+
+  if (panning) {
+    S.panX = panStartPanX - (e.clientX - panStartX) / S.scale;
+    S.panY = panStartPanY - (e.clientY - panStartY) / S.scale;
+    redraw();
+    return;
+  }
+
+  // Hover hit-test
+  const thresh = 12;
+  let found = null;
+  for (const p of S.points) {
+    const sx = toScreenX(p.x), sy = toScreenY(p.y);
+    if (Math.hypot(sx - mx, sy - my) < thresh) { found = p; break; }
+  }
+  if (found !== (S.hoveredId ? S.pointsById[S.hoveredId] : null)) {
+    S.hoveredId = found ? found.id : null;
+    canvas2d.style.cursor = found ? "pointer" : "crosshair";
+    if (found) showTooltip(found, e.clientX, e.clientY);
+    else hideTooltip();
+    redraw();
+  } else if (found) showTooltip(found, e.clientX, e.clientY);
+});
+canvas2d.addEventListener("pointerup", e => {
+  if (panning && Math.hypot(e.clientX - panStartX, e.clientY - panStartY) < 4) {
+    // Was a click, not a drag
+    const rect = canvas2d.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const thresh = 12;
+    let found = null;
+    for (const p of S.points) {
+      const sx = toScreenX(p.x), sy = toScreenY(p.y);
+      if (Math.hypot(sx - mx, sy - my) < thresh) { found = p; break; }
+    }
+    if (found) openInspector(found);
+    else closeInspector();
+  }
+  panning = false;
+});
+canvas2d.addEventListener("wheel", e => {
+  e.preventDefault();
+  const rect = canvas2d.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const dx = toDataX(mx), dy = toDataY(my);
+  const factor = e.deltaY < 0 ? 1.12 : 0.89;
+  S.scale *= factor;
+  S.panX = dx - (mx - W / 2) / S.scale;
+  S.panY = dy - (my - H / 2) / S.scale;
+  redraw();
+}, { passive: false });
+canvas2d.addEventListener("mouseleave", () => { hideTooltip(); S.hoveredId = null; redraw(); });
+
+// ── Stats & Legend ────────────────────────────────────────────────────────
+function updateStats() {
+  const n = S.points.length;
+  const docs = new Set(S.points.map(p => p.document)).size;
+  document.getElementById("stat-points").textContent = n + " pts";
+  document.getElementById("stat-docs").textContent = docs + " docs";
+  document.getElementById("sb-points").textContent = n;
+  document.getElementById("sb-docs").textContent = docs;
+  document.getElementById("empty-state").classList.toggle("hidden", n > 0);
+  buildLegend();
+}
+
+function buildLegend() {
+  const docs = [...new Set(S.points.map(p => p.document))];
+  const el = document.getElementById("doc-legend");
+  el.innerHTML = docs.map(d => `
+    <div class="flex items-center gap-2">
+      <div class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${docColor(d)}"></div>
+      <span class="text-[10px] text-on-surface-variant truncate max-w-[160px]">${d}</span>
+    </div>`).join("");
+}
+
+// ── Live indicator ────────────────────────────────────────────────────────
+function setLive(on) {
+  const dot = document.getElementById("live-dot");
+  const lbl = document.getElementById("live-label");
+  if (on) {
+    dot.className = "w-2 h-2 rounded-full bg-tertiary";
+    lbl.textContent = "Live"; lbl.className = "text-[10px] uppercase tracking-widest text-tertiary";
+  } else {
+    dot.className = "w-2 h-2 rounded-full bg-outline";
+    lbl.textContent = "Offline"; lbl.className = "text-[10px] uppercase tracking-widest text-outline";
+  }
+}
+
+function flashLive() {
+  const dot = document.getElementById("live-dot");
+  dot.classList.add("live-pulse");
+  dot.addEventListener("animationend", () => dot.classList.remove("live-pulse"), { once: true });
+}
+
+// ── Load data ─────────────────────────────────────────────────────────────
+async function loadPoints() {
+  try {
+    const data = await fetch("/vectors").then(r => r.json());
+    S.points = data;
+    S.pointsById = {};
+    data.forEach(p => { S.pointsById[p.id] = p; });
+    updateStats();
+    fitAll();
+  } catch (e) {
+    console.error("Failed to load vectors", e);
+  }
+}
+
+async function refreshQuery() {
+  try {
+    const data = await fetch("/vectors/last-query").then(r => r.json());
+    S.lastRetrieved = data.retrieved_ids || [];
+    S.lastQueryScore = data.scores || {};
+    S.lastQueryXY = data.query_xy || null;
+    if (S.mode === "3d") update3DPositions();
+    redraw();
+  } catch (e) {
+    console.error("Failed to load last query", e);
+  }
+}
+
+// ── SSE live updates ──────────────────────────────────────────────────────
+function startSSE() {
+  const es = new EventSource("/vectors/updates");
+  es.onopen = () => setLive(true);
+  es.onmessage = evt => {
+    const newPoints = JSON.parse(evt.data);
+    let added = 0;
+    newPoints.forEach(p => {
+      if (!S.pointsById[p.id]) {
+        S.pointsById[p.id] = p;
+        S.points.push(p);
+        added++;
+      } else {
+        // Update position (PCA recomputed on ingest)
+        Object.assign(S.pointsById[p.id], p);
+      }
+    });
+    if (added || newPoints.length) {
+      S.kmVersion = -1; // invalidate cluster cache
+      updateStats();
+      flashLive();
+      if (added) fitAll(); else redraw();
+      if (S.mode === "3d") update3DPositions();
+    }
+  };
+  es.onerror = () => setLive(false);
+}
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closeInspector();
+  if (e.key === "f" || e.key === "F") fitAll();
+});
+
+// ── Boot ──────────────────────────────────────────────────────────────────
+resizeCanvas();
+loadPoints().then(() => refreshQuery());
+startSSE();
 </script>
-
 </body>
-
 </html>

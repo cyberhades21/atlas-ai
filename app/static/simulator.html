@@ -1159,7 +1159,9 @@ function buildOverviewHTML(nodeId, p) {
       ) + section("Metrics",
         metric("Results", p.results_count || 0) +
         (p.degraded ? `<div class="mt-2 flex items-center gap-2 text-error text-[10px]"><span class="material-symbols-outlined text-sm">warning</span>Degraded — no chunks retrieved</div>` : "")
-      );
+      ) + `<a href="/vectors-ui" target="_blank" class="mt-3 flex items-center justify-center gap-2 w-full py-2 bg-surface-container border border-outline-variant/20 rounded-sm text-[10px] font-bold uppercase tracking-widest text-on-surface-variant hover:text-primary hover:border-primary/30 transition-colors">
+        <span class="material-symbols-outlined text-sm">scatter_plot</span>View in Vector Explorer
+      </a>`;
 
     case "context_builder":
       return section("Context Preview", codeBlock(p.context_preview || "")) +

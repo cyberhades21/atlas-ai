@@ -153,6 +153,24 @@ def run_instrumented_pipeline(
             "dimensions": len(query_embedding),
             "vector_preview": query_embedding[:8],
         }, latency_ms=latency)
+
+        # Project query embedding into PCA space for vector explorer overlay.
+        # Fire-and-forget in a background thread — never blocks the pipeline.
+        def _project_async():
+            try:
+                import urllib.request, json as _json
+                body = _json.dumps({"embedding": query_embedding}).encode()
+                req = urllib.request.Request(
+                    "http://127.0.0.1:8000/vectors/project-query",
+                    data=body,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                urllib.request.urlopen(req, timeout=5)
+            except Exception:
+                pass
+        threading.Thread(target=_project_async, daemon=True).start()
+
         _wait_for_gate(run_id)
 
         # ----------------------------------------------------------------
@@ -183,6 +201,18 @@ def run_instrumented_pipeline(
             "retrieved_docs": retrieved_docs,
             "degraded": low_result,
         }, latency_ms=latency)
+
+        # Write retrieved IDs + scores to the last-query overlay state.
+        try:
+            from app.api.debug import _last_query_state
+            chunk_ids = [meta.get("document", "unknown") + f"_{i}" for i, meta in enumerate(metadata)]
+            _last_query_state["retrieved_ids"] = chunk_ids
+            _last_query_state["scores"] = {
+                cid: round(1 - meta.get("_distance", 1), 4)
+                for cid, meta in zip(chunk_ids, metadata)
+            }
+        except Exception:
+            pass
 
         if low_result:
             _emit(run_id, "vector_retrieval", "warning", {
