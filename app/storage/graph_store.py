@@ -1,6 +1,6 @@
 import sqlite3
 from app.pipeline.graph_updates import graph_update_bus
-from app.ai.entity_normalizer import normalize_entity
+from app.ai.entity_normalizer import normalize_entity, normalize_relation
 
 conn = sqlite3.connect("data/graph.db", check_same_thread=False)
 
@@ -44,7 +44,7 @@ def store_relationships(triples, document):
     saved = []
     for t in triples:
         entity1 = normalize_entity(t.get("entity1") or "")
-        relation = (t.get("relation") or "").strip().lower()
+        relation = normalize_relation(t.get("relation") or "")
         entity2 = normalize_entity(t.get("entity2") or "")
         # Guard AFTER normalization — a name that strips to "" is discarded
         if not entity1 or not relation or not entity2:
