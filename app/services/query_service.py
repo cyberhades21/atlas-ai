@@ -28,7 +28,7 @@ from app.ai.embeddings import embed_query
 from app.storage.vector_store import search
 from app.ai.llm import generate_answer, DEFAULT_MODEL
 from app.ai.entity_extractor import extract_entities
-from app.storage.graph_store import search_relationships
+from app.storage.graph_store import search_relationships, search_relationships_nhop
 
 logger = logging.getLogger(__name__)
 
@@ -44,14 +44,19 @@ def run_entity_extraction(question: str) -> list:
 
 
 def run_graph_search(entities: list) -> tuple:
-    """Returns (graph_context_str, list_of_triple_dicts)."""
+    """Returns (graph_context_str, list_of_triple_dicts).
+
+    Uses 2-hop BFS via search_relationships_nhop() so connected context
+    (neighbors of neighbors) is gathered in a single batched traversal.
+    """
     graph_context = ""
     graph_triples = []
-    for entity in entities:
-        relations = search_relationships(entity)
-        for a, r, b in relations:
-            graph_context += f"{a} {r} {b}\n"
-            graph_triples.append({"entity1": a, "relation": r, "entity2": b})
+    if not entities:
+        return graph_context, graph_triples
+
+    for a, r, b in search_relationships_nhop(entities, hops=2):
+        graph_context += f"{a} {r} {b}\n"
+        graph_triples.append({"entity1": a, "relation": r, "entity2": b})
     return graph_context, graph_triples
 
 

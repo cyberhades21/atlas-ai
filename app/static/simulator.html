@@ -379,8 +379,30 @@ tailwind.config = {
           <div class="flex justify-between"><span class="text-[10px] text-slate-500 uppercase">Entities</span><span id="ctx-entities" class="text-[10px] font-mono text-primary">—</span></div>
           <div class="flex justify-between"><span class="text-[10px] text-slate-500 uppercase">Triples</span><span id="ctx-triples" class="text-[10px] font-mono text-primary">—</span></div>
           <div class="flex justify-between"><span class="text-[10px] text-slate-500 uppercase">Embedding dim</span><span id="ctx-dims" class="text-[10px] font-mono text-primary">—</span></div>
-          <div class="flex justify-between"><span class="text-[10px] text-slate-500 uppercase">Approx Tokens</span><span id="ctx-tokens" class="text-[10px] font-mono text-primary">—</span></div>
+          <div class="flex justify-between"><span class="text-[10px] text-slate-500 uppercase">Prompt Tokens</span><span id="ctx-tokens" class="text-[10px] font-mono text-primary">—</span></div>
           <div class="flex justify-between"><span class="text-[10px] text-slate-500 uppercase">Model</span><span id="ctx-model" class="text-[10px] font-mono text-primary">—</span></div>
+        </div>
+      </div>
+
+      <!-- Token Usage -->
+      <div class="mt-4 p-3 bg-surface-container-highest/40 rounded-sm border border-outline-variant/15">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="material-symbols-outlined text-tertiary text-sm">toll</span>
+          <span class="text-[10px] font-bold text-on-surface uppercase tracking-widest">Token Usage</span>
+        </div>
+        <div class="space-y-2">
+          <div class="flex justify-between items-center">
+            <span class="text-[10px] text-slate-500 uppercase">Prompt</span>
+            <span id="tok-prompt" class="text-[10px] font-mono text-secondary">—</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-[10px] text-slate-500 uppercase">Output</span>
+            <span id="tok-output" class="text-[10px] font-mono text-tertiary">—</span>
+          </div>
+          <div class="border-t border-outline-variant/20 pt-2 flex justify-between items-center">
+            <span class="text-[10px] text-slate-400 uppercase font-bold">Total</span>
+            <span id="tok-total" class="text-[10px] font-mono font-bold text-primary">—</span>
+          </div>
         </div>
       </div>
     </div>
@@ -914,7 +936,19 @@ function handleEvent(evt) {
       document.getElementById("ctx-dims").textContent = payload.dimensions || "—";
     }
     if (step === "prompt_builder") {
-      document.getElementById("ctx-tokens").textContent = "~" + (payload.approx_tokens || 0);
+      const pt = payload.approx_tokens || 0;
+      document.getElementById("ctx-tokens").textContent = "~" + pt;
+      document.getElementById("tok-prompt").textContent = "~" + pt.toLocaleString();
+      state.promptTokens = pt;
+      const ot = state.outputTokens || 0;
+      document.getElementById("tok-total").textContent = ot > 0 ? "~" + (pt + ot).toLocaleString() : "~" + pt.toLocaleString();
+    }
+    if (step === "llm_generation") {
+      const ot = payload.approx_output_tokens || 0;
+      document.getElementById("tok-output").textContent = "~" + ot.toLocaleString();
+      state.outputTokens = ot;
+      const pt = state.promptTokens || 0;
+      document.getElementById("tok-total").textContent = "~" + (pt + ot).toLocaleString();
     }
     if (step === "query_received") {
       document.getElementById("ctx-model").textContent = (payload.model || simSelectedModel).split(":")[0];
@@ -1135,12 +1169,31 @@ function buildOverviewHTML(nodeId, p) {
           metric("Total Context", (p.total_context_chars || 0) + " chars")
         );
 
-    case "prompt_builder":
+    case "prompt_builder": {
+      const ptoks = p.approx_tokens || 0;
+      const otoks = state.outputTokens || 0;
+      const tokenBar = `
+        <div class="mt-2 p-3 rounded-sm border border-secondary/30 bg-secondary/5">
+          <div class="text-[9px] text-slate-500 uppercase tracking-widest mb-2">Token Usage</div>
+          <div class="flex justify-between mb-1">
+            <span class="text-[10px] text-slate-400">Prompt</span>
+            <span class="text-[11px] font-mono font-bold text-secondary">~${ptoks.toLocaleString()}</span>
+          </div>
+          ${otoks > 0 ? `<div class="flex justify-between mb-1">
+            <span class="text-[10px] text-slate-400">Output</span>
+            <span class="text-[11px] font-mono font-bold text-tertiary">~${otoks.toLocaleString()}</span>
+          </div>
+          <div class="border-t border-outline-variant/20 pt-1 flex justify-between">
+            <span class="text-[10px] text-slate-300 font-bold">Total</span>
+            <span class="text-[11px] font-mono font-bold text-primary">~${(ptoks + otoks).toLocaleString()}</span>
+          </div>` : ""}
+        </div>`;
       return section("Prompt Preview", codeBlock(p.prompt_preview || "")) +
         section("Metrics",
           metric("Prompt Length", (p.prompt_length_chars || 0) + " chars") +
-          metric("Approx Tokens", "~" + (p.approx_tokens || 0), "text-secondary")
-        );
+          metric("Prompt Tokens", "~" + ptoks.toLocaleString(), "text-secondary")
+        ) + tokenBar;
+    }
 
     case "llm_generation":
       return section("Answer",
@@ -1237,9 +1290,11 @@ async function startRun() {
   document.getElementById("errorBanner").classList.add("hidden");
   document.getElementById("reasoningTrace").innerHTML = "";
   document.getElementById("retrievedChunks").innerHTML = `<p class="text-[10px] text-slate-600 italic">Awaiting retrieval...</p>`;
-  ["ctx-entities","ctx-triples","ctx-dims","ctx-tokens","ctx-model"].forEach(id => {
+  ["ctx-entities","ctx-triples","ctx-dims","ctx-tokens","ctx-model","tok-prompt","tok-output","tok-total"].forEach(id => {
     document.getElementById(id).textContent = "—";
   });
+  state.promptTokens = 0;
+  state.outputTokens = 0;
 
   // POST to start run
   const res  = await fetch("/simulator/run", {

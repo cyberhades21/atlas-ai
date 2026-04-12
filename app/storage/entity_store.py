@@ -1,4 +1,5 @@
 import sqlite3
+from app.ai.entity_normalizer import normalize_entity
 
 conn = sqlite3.connect("data/entities.db", check_same_thread=False)
 
@@ -18,7 +19,11 @@ def store_entities(entities, document):
 
         if isinstance(entity, dict):
             entity = entity.get("entity")
-        
+
+        entity = normalize_entity(entity or "")
+        if not entity:
+            continue
+
         conn.execute(
             "INSERT INTO entities VALUES (?, ?)",
             (entity, document)
