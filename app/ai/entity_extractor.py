@@ -22,9 +22,8 @@ PROMPT = """Extract named entities from the text below.
 
 Rules:
 - Return ONLY a JSON array of strings, nothing else.
+- Use only names that appear in the text. Do not invent or infer entities.
 - Use canonical names: no titles, honorifics, or possessives.
-  WRONG: ["President Obama", "Dr. Smith", "Obama's policy"]
-  RIGHT: ["barack obama", "jane smith", "obama policy"]
 - Use lowercase for all entity names.
 - If no entities are found, return [].
 
