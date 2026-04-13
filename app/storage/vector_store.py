@@ -22,11 +22,14 @@ FIX #3 — empty collection guard:
     entirely and return empty lists.
 """
 
-import os
+import logging
 from pathlib import Path
 from typing import List, Tuple
 
 import chromadb
+from sklearn.decomposition import PCA
+
+logger = logging.getLogger(__name__)
 
 _client = None
 _collection = None
@@ -53,6 +56,29 @@ def store_embeddings(chunks: List[str], embeddings: List, filename: str):
         documents=chunks,
         metadatas=metadatas,
     )
+
+    # Broadcast 2D-projected positions for newly added chunks to live vector explorer.
+    # Import lazily to avoid circular imports at module load time.
+    try:
+        from app.pipeline.vector_updates import vector_update_bus
+        all_data = col.get(include=["embeddings", "documents", "metadatas"])
+        if len(all_data["embeddings"]) >= 2:
+            reduced = PCA(n_components=2).fit_transform(all_data["embeddings"])
+            new_id_set = set(ids)
+            points = [
+                {
+                    "id":       all_data["ids"][i],
+                    "x":        float(reduced[i][0]),
+                    "y":        float(reduced[i][1]),
+                    "text":     all_data["documents"][i][:200],
+                    "document": all_data["metadatas"][i]["document"],
+                }
+                for i, uid in enumerate(all_data["ids"])
+                if uid in new_id_set
+            ]
+            vector_update_bus.emit(points)
+    except Exception:
+        logger.debug("Vector update broadcast skipped", exc_info=True)
 
 
 def search(query_embedding, n_results: int = 5) -> Tuple[List[str], List[dict]]:
