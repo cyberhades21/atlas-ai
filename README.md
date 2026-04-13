@@ -11,6 +11,7 @@ A fully local, open-source Retrieval-Augmented Generation system with a **live k
 
 | I want to… | Do this |
 |---|---|
+| Pick up a beginner task | [Browse GOOD_FIRST_ISSUES.md](GOOD_FIRST_ISSUES.md) |
 | Report a bug | [Open a Bug Report](https://github.com/cyberhades21/atlas-ai/issues/new?template=bug_report.md) |
 | Request a feature | [Open a Feature Request](https://github.com/cyberhades21/atlas-ai/issues/new?template=feature_request.md) |
 | Propose a new pipeline stage | [Open a Pipeline Stage proposal](https://github.com/cyberhades21/atlas-ai/issues/new?template=pipeline_stage.md) |

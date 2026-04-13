@@ -180,6 +180,8 @@ The core observability contract: every pipeline stage in `app/pipeline/` **must*
 
 ## Roadmap & Good First Issues
 
+A curated list of self-contained, well-scoped tasks is maintained in [GOOD_FIRST_ISSUES.md](GOOD_FIRST_ISSUES.md). Each entry includes the exact file and line range so you can start immediately without needing to explore the codebase first.
+
 Browse issues labelled [`good first issue`](https://github.com/cyberhades21/atlas-ai/labels/good%20first%20issue) for beginner-friendly tasks.
 
 Browse [`help wanted`](https://github.com/cyberhades21/atlas-ai/labels/help%20wanted) for tasks where outside input is especially welcome.
