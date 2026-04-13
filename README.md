@@ -2,6 +2,26 @@
 
 A fully local, open-source Retrieval-Augmented Generation system with a **live knowledge graph, step-by-step pipeline visualiser, and full execution observability**.
 
+[![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+---
+
+## Contributing
+
+| I want to… | Do this |
+|---|---|
+| Report a bug | [Open a Bug Report](https://github.com/cyberhades21/atlas-ai/issues/new?template=bug_report.md) |
+| Request a feature | [Open a Feature Request](https://github.com/cyberhades21/atlas-ai/issues/new?template=feature_request.md) |
+| Propose a new pipeline stage | [Open a Pipeline Stage proposal](https://github.com/cyberhades21/atlas-ai/issues/new?template=pipeline_stage.md) |
+| Ask a question | [Start a Discussion](https://github.com/cyberhades21/atlas-ai/discussions) |
+| Submit a fix or feature | [Read CONTRIBUTING.md](CONTRIBUTING.md) then open a PR |
+| Report a security issue | [Private vulnerability report](https://github.com/cyberhades21/atlas-ai/security/advisories/new) |
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide including dev setup, coding conventions, and PR guidelines.
+
+---
+
 ## Demo
 
 ![Simulator Demo](static/images/Demonstration.gif)
